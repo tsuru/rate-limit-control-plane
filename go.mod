@@ -1,10 +1,11 @@
 module github.com/tsuru/rate-limit-control-plane
 
-go 1.21.0
+go 1.22.10
 
 require (
 	github.com/go-logr/logr v1.2.3
 	github.com/kedacore/keda/v2 v2.10.1
+	github.com/tsuru/nginx-operator v0.15.2-0.20240515194244-a38b4b58e866
 	github.com/tsuru/rpaas-operator v0.46.0
 	k8s.io/api v0.26.7
 	k8s.io/apimachinery v0.26.7
@@ -46,7 +47,6 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/tsuru/nginx-operator v0.15.2-0.20240515194244-a38b4b58e866 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect

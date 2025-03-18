@@ -8,13 +8,14 @@ import (
 	"os"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	nginxOperatorv1alpha1 "github.com/tsuru/nginx-operator/api/v1alpha1"
 	"github.com/tsuru/rate-limit-control-plane/controllers"
+	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"k8s.io/api/node/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
-	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -28,6 +29,7 @@ func init() {
 	_ = kedav1alpha1.AddToScheme(scheme)
 	_ = v1alpha1.AddToScheme(scheme)
 	_ = rpaasOperatorv1alpha1.AddToScheme(scheme)
+	_ = nginxOperatorv1alpha1.AddToScheme(scheme)
 }
 
 func main() {
