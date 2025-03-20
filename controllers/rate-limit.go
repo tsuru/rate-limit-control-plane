@@ -50,7 +50,7 @@ func (c *RateLimitController) Reconcile() {
 func (c *RateLimitController) listRpaasInstances(ctx context.Context) (rpaasOperatorv1alpha1.RpaasInstanceList, error) {
 	rpaasList := rpaasOperatorv1alpha1.RpaasInstanceList{}
 	err := c.List(ctx, &rpaasList, &client.ListOptions{
-		Namespace: "rpaasv2-be-gke-main",
+		Namespace: "rpaasv2",
 	})
 	return rpaasList, err
 }
@@ -61,7 +61,7 @@ func (c *RateLimitController) getNginxInstancesFromRpaasInstance(ctx context.Con
 		LabelSelector: labels.SelectorFromSet(map[string]string{
 			"rpaas.extensions.tsuru.io/instance-name": rpaasInstance.Name,
 		}),
-		Namespace: "rpaasv2-be-gke-main",
+		Namespace: "rpaasv2",
 	})
 	return nginxPodList, err
 }
