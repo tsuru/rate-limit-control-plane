@@ -20,13 +20,7 @@ save-docker-minikube: build-docker-minikube
 	docker save $(IMAGE) | minikube image load -
 
 .PHONY: minikube-run
-minikube-run: 
+minikube-run: save-docker-minikube
 	kubectl run rate-limit-control-plane --rm -i --tty --image $(IMAGE) \
 		-n $(NAMESPACE) --image-pull-policy Never \
 		--overrides='{ "spec": { "serviceAccountName": "rpaas-operator" } }'
-
-
-
-
-
-

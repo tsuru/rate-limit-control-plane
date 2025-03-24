@@ -8,6 +8,8 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/tsuru/nginx-operator v0.15.2-0.20240515194244-a38b4b58e866
 	github.com/tsuru/rpaas-operator v0.46.0
+	github.com/vmihailenco/msgpack/v5 v5.4.1
+	golang.org/x/sync v0.1.0
 	k8s.io/api v0.26.7
 	k8s.io/apimachinery v0.26.7
 	k8s.io/client-go v0.26.7
@@ -48,6 +50,7 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect

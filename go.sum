@@ -170,6 +170,10 @@ github.com/tsuru/nginx-operator v0.15.2-0.20240515194244-a38b4b58e866 h1:aCoSpcf
 github.com/tsuru/nginx-operator v0.15.2-0.20240515194244-a38b4b58e866/go.mod h1:qdJQVY4buUQymyhcpYO99ZCfLMPRvcB/1ywK3PAh/+Q=
 github.com/tsuru/rpaas-operator v0.46.0 h1:nBZO380F3KiGl4t5huw5FHjSvPgBetNVNj39Pxms9IA=
 github.com/tsuru/rpaas-operator v0.46.0/go.mod h1:aUYNaPrPgNn/5k+VdA+6JgcPwYkhUvh790r8Q0vZ+O4=
+github.com/vmihailenco/msgpack/v5 v5.4.1 h1:cQriyiUvjTwOHg8QZaPihLWeRAAVoCpE00IUPn0Bjt8=
+github.com/vmihailenco/msgpack/v5 v5.4.1/go.mod h1:GaZTsDaehaPpQVyxrf5mtQlH+pc21PIudVV/E3rRQok=
+github.com/vmihailenco/tagparser/v2 v2.0.0 h1:y09buUbR+b5aycVFQs/g70pqKVZNBmxwAhO7/IwNM9g=
+github.com/vmihailenco/tagparser/v2 v2.0.0/go.mod h1:Wri+At7QHww0WTrCBeu4J6bNtoV6mEfg5OIWRZA9qds=
 github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f/go.mod h1:N2zxlSyiKSe5eX1tZViRH5QA0qijqEDrYZiPEAiq3wU=
 github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415/go.mod h1:GwrjFmJcFw6At/Gs6z4yjiIwzuJ1/+UwLxMQDVQXShQ=
 github.com/xeipuuv/gojsonschema v1.2.0/go.mod h1:anYRn/JVcOK2ZgGU+IjEV4nwlhoK5sQluxsYJ78Id3Y=
