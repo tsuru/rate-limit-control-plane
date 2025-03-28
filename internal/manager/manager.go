@@ -1,3 +1,7 @@
+// Copyright 2025 tsuru authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package manager
 
 import (
@@ -7,8 +11,9 @@ import (
 )
 
 type Params struct {
-	stop chan bool
-	work chan bool
+	stop  chan bool
+	work  chan bool
+	value float64
 }
 
 type GoroutineManager struct {
@@ -24,7 +29,7 @@ type GoroutineManagerInterface interface {
 
 var _ GoroutineManagerInterface = &GoroutineManager{}
 
-func NewGoroutineManager() *GoroutineManager {
+func NewGoroutine() *GoroutineManager {
 	return &GoroutineManager{
 		tasks: map[string]Params{},
 	}
@@ -78,4 +83,12 @@ func (gm *GoroutineManager) Run(id string) {
 		param.work <- true
 	}
 	gm.mu.Unlock()
+}
+
+func (gm *GoroutineManager) ListTasks() {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	for id := range gm.tasks {
+		fmt.Printf("* ID: %s\n", id)
+	}
 }
