@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/tsuru/rate-limit-control-plane/internal/config"
+	"github.com/tsuru/rate-limit-control-plane/internal/manager"
 	ratelimit "github.com/tsuru/rate-limit-control-plane/pkg/rate-limit"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"github.com/vmihailenco/msgpack/v5"
@@ -31,7 +32,8 @@ const (
 
 type RateLimitController struct {
 	client.Client
-	Log logr.Logger
+	Log              logr.Logger
+	ManagerGoroutine *manager.GoroutineManager
 }
 
 func (c *RateLimitController) Reconcile() {
@@ -130,6 +132,7 @@ func (c *RateLimitController) reconcileNginxRateLimitsZone(ctx context.Context, 
 	if err != nil {
 		return err
 	}
+	c.ManagerGoroutine.ListTasks()
 	fmt.Printf("---> RATE LIMIT ENTRIES BY POD MAP FOR ZONE %s: %v\n", zone, rateLimitZoneEntriesByPod)
 	c.aggregatRateLimitZoneEntries(rateLimitZoneEntriesByPod)
 	return nil
