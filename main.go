@@ -10,6 +10,7 @@ import (
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	nginxOperatorv1alpha1 "github.com/tsuru/nginx-operator/api/v1alpha1"
 	"github.com/tsuru/rate-limit-control-plane/controllers"
+	"github.com/tsuru/rate-limit-control-plane/internal/manager"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"k8s.io/api/node/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,6 +34,7 @@ func init() {
 }
 
 func main() {
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -47,14 +49,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	manager := manager.NewGoroutine()
 	rateLimitControl := &controllers.RateLimitController{
-		Client: mgr.GetClient(),
-		Log:    mgr.GetLogger().WithName("RateLimitController"),
+		Client:           mgr.GetClient(),
+		Log:              mgr.GetLogger().WithName("RateLimitController"),
+		ManagerGoroutine: manager,
 	}
 	go rateLimitControl.Reconcile()
 	setupLog.Info("starting manager")
+
+	if err = (&controllers.RateLimitControllerReconcile{
+		Client:           mgr.GetClient(),
+		Log:              mgr.GetLogger().WithName("controllers").WithName("RateLimitControllerReconcile"),
+		ManagerGoroutine: manager,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitControllerReconcile")
+		os.Exit(1)
+	}
+
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+
 }
