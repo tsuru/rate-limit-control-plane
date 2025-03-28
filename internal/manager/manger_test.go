@@ -1,3 +1,7 @@
+// Copyright 2025 tsuru authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package manager
 
 import (
@@ -11,7 +15,7 @@ func TestManagerGoRoutines(t *testing.T) {
 
 	t.Run("should create go routines", func(t *testing.T) {
 		assert := assert.New(t)
-		manager := NewGoroutineManager()
+		manager := NewGoroutine()
 		assert.Len(manager.tasks, 0)
 
 		manager.Start("1", func() {})
@@ -25,7 +29,7 @@ func TestManagerGoRoutines(t *testing.T) {
 
 	t.Run("should stop go routines", func(t *testing.T) {
 		assert := assert.New(t)
-		manager := NewGoroutineManager()
+		manager := NewGoroutine()
 		manager.Start("1", func() {})
 		manager.Start("2", func() {})
 		assert.Len(manager.tasks, 2)
@@ -47,7 +51,7 @@ func TestManagerGoRoutines(t *testing.T) {
 			fmt.Println("*")
 			<-ch
 		}
-		manager := NewGoroutineManager()
+		manager := NewGoroutine()
 		manager.Start("1", work)
 		manager.Run("1")
 		ch <- true
@@ -64,7 +68,7 @@ func TestManagerGoRoutines(t *testing.T) {
 			fmt.Println("*")
 			<-ch
 		}
-		manager := NewGoroutineManager()
+		manager := NewGoroutine()
 		manager.Start("1", work)
 		manager.Start("1", work)
 		manager.Run("1")
@@ -79,10 +83,9 @@ func TestManagerGoRoutines(t *testing.T) {
 		ch := make(chan bool)
 		work := func() {
 			countWork++
-			fmt.Println("*")
 			<-ch
 		}
-		manager := NewGoroutineManager()
+		manager := NewGoroutine()
 		manager.Start("1", work)
 		manager.Run("1")
 		ch <- true
