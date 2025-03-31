@@ -6,6 +6,7 @@ package main
 
 import (
 	"os"
+	"time"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	nginxOperatorv1alpha1 "github.com/tsuru/nginx-operator/api/v1alpha1"
@@ -50,14 +51,6 @@ func main() {
 	}
 
 	manager := manager.NewGoroutine()
-	rateLimitControl := &controllers.RateLimitController{
-		Client:           mgr.GetClient(),
-		Log:              mgr.GetLogger().WithName("RateLimitController"),
-		ManagerGoroutine: manager,
-	}
-	go rateLimitControl.Reconcile()
-	setupLog.Info("starting manager")
-
 	if err = (&controllers.RateLimitControllerReconcile{
 		Client:           mgr.GetClient(),
 		Log:              mgr.GetLogger().WithName("controllers").WithName("RateLimitControllerReconcile"),
@@ -66,6 +59,16 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitControllerReconcile")
 		os.Exit(1)
 	}
+
+	go func() {
+		for {
+			manager.ListTasks()
+			time.Sleep(time.Second * 5)
+			for _, value := range manager.GetTask() {
+				manager.Run(value)
+			}
+		}
+	}()
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
