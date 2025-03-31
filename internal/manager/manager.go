@@ -6,23 +6,11 @@ package manager
 
 import (
 	"fmt"
-	"sync"
 	"time"
 )
 
-type Params struct {
-	stop  chan bool
-	work  chan bool
-	value float64
-}
-
-type GoroutineManager struct {
-	mu    sync.Mutex
-	tasks map[string]Params
-}
-
 type GoroutineManagerInterface interface {
-	Start(id string, workFunc func())
+	Start(id string, workFunc workFunc, zones []string)
 	Stop(id string)
 	Run(id string)
 }
@@ -35,7 +23,7 @@ func NewGoroutine() *GoroutineManager {
 	}
 }
 
-func (gm *GoroutineManager) Start(id string, workFunc func()) {
+func (gm *GoroutineManager) Start(id string, workFunc workFunc, zones []string) {
 	gm.mu.Lock()
 	if _, exists := gm.tasks[id]; exists {
 		gm.mu.Unlock()
@@ -43,10 +31,17 @@ func (gm *GoroutineManager) Start(id string, workFunc func()) {
 	}
 	stop := make(chan bool, 1)
 	work := make(chan bool, 1)
-	gm.tasks[id] = Params{
+	params := Params{
 		stop: stop,
 		work: work,
 	}
+	for _, zoneName := range zones {
+		params.zones = append(params.zones, Zone{
+			Name:             zoneName,
+			RateLimitEntries: []RateLimitEntry{},
+		})
+	}
+	gm.tasks[id] = params
 	gm.mu.Unlock()
 
 	go func() {
@@ -56,7 +51,18 @@ func (gm *GoroutineManager) Start(id string, workFunc func()) {
 				fmt.Printf("end goroutines %s\n", id)
 				return
 			case <-work:
-				workFunc()
+				for _, zone := range params.zones {
+					result, err := workFunc(zone.Name)
+					if err != nil {
+						fmt.Printf("error %s\n", err)
+						continue
+					}
+					for i, z := range params.zones {
+						if z.Name == zone.Name {
+							params.zones[i].RateLimitEntries = result.RateLimitEntries
+						}
+					}
+				}
 			default:
 				time.Sleep(1 * time.Second)
 			}
@@ -88,7 +94,23 @@ func (gm *GoroutineManager) Run(id string) {
 func (gm *GoroutineManager) ListTasks() {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
-	for id := range gm.tasks {
-		fmt.Printf("* ID: %s\n", id)
+	for ip, params := range gm.tasks {
+		message := ""
+		message += fmt.Sprintf("* ID: %s - ", ip)
+		for _, zone := range params.zones {
+			message += fmt.Sprintf(" * Zone: %s - - %v", zone.Name, zone.RateLimitEntries)
+		}
+		message += "\n"
+		fmt.Println(message)
 	}
+}
+
+func (gm *GoroutineManager) GetTask() []string {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	ips := []string{}
+	for id := range gm.tasks {
+		ips = append(ips, id)
+	}
+	return ips
 }
