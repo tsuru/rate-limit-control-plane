@@ -12,26 +12,25 @@ import (
 )
 
 func TestManagerGoRoutines(t *testing.T) {
+	funcWork := func(zone string) (Zone, error) { return Zone{}, nil }
 
 	t.Run("should create go routines", func(t *testing.T) {
 		assert := assert.New(t)
 		manager := NewGoroutine()
 		assert.Len(manager.tasks, 0)
-
-		manager.Start("1", func() {})
+		manager.Start("1", funcWork, []string{"zone1"})
 		assert.Len(manager.tasks, 1)
-		manager.Start("1", func() {})
+		manager.Start("1", funcWork, []string{"zone1"})
 		assert.Len(manager.tasks, 1)
-
-		manager.Start("2", func() {})
+		manager.Start("2", funcWork, []string{"zone2"})
 		assert.Len(manager.tasks, 2)
 	})
 
 	t.Run("should stop go routines", func(t *testing.T) {
 		assert := assert.New(t)
 		manager := NewGoroutine()
-		manager.Start("1", func() {})
-		manager.Start("2", func() {})
+		manager.Start("1", funcWork, []string{"zone1"})
+		manager.Start("2", funcWork, []string{"zone2"})
 		assert.Len(manager.tasks, 2)
 		manager.Stop("1")
 
@@ -46,13 +45,14 @@ func TestManagerGoRoutines(t *testing.T) {
 		assert := assert.New(t)
 		countWork := 0
 		ch := make(chan bool)
-		work := func() {
+		work := func(zone string) (Zone, error) {
 			countWork++
 			fmt.Println("*")
 			<-ch
+			return Zone{}, nil
 		}
 		manager := NewGoroutine()
-		manager.Start("1", work)
+		manager.Start("1", work, []string{"zone1"})
 		manager.Run("1")
 		ch <- true
 		assert.Equal(1, countWork)
@@ -63,14 +63,15 @@ func TestManagerGoRoutines(t *testing.T) {
 		assert := assert.New(t)
 		countWork := 0
 		ch := make(chan bool)
-		work := func() {
+		work := func(zone string) (Zone, error) {
 			countWork++
 			fmt.Println("*")
 			<-ch
+			return Zone{}, nil
 		}
 		manager := NewGoroutine()
-		manager.Start("1", work)
-		manager.Start("1", work)
+		manager.Start("1", work, []string{"zone1"})
+		manager.Start("1", work, []string{"zone1"})
 		manager.Run("1")
 		ch <- true
 		assert.Equal(1, countWork)
@@ -81,12 +82,13 @@ func TestManagerGoRoutines(t *testing.T) {
 		assert := assert.New(t)
 		countWork := 0
 		ch := make(chan bool)
-		work := func() {
+		work := func(zone string) (Zone, error) {
 			countWork++
 			<-ch
+			return Zone{}, nil
 		}
 		manager := NewGoroutine()
-		manager.Start("1", work)
+		manager.Start("1", work, []string{"zone1"})
 		manager.Run("1")
 		ch <- true
 		assert.Equal(1, countWork)
@@ -94,11 +96,12 @@ func TestManagerGoRoutines(t *testing.T) {
 
 		countWork2 := 0
 		ch2 := make(chan bool)
-		work2 := func() {
+		work2 := func(zone string) (Zone, error) {
 			countWork2++
 			<-ch2
+			return Zone{}, nil
 		}
-		manager.Start("2", work2)
+		manager.Start("2", work2, []string{"zone2"})
 		manager.Run("2")
 		ch2 <- true
 		assert.Equal(1, countWork2)
