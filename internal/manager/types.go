@@ -20,8 +20,20 @@ type Params struct {
 }
 
 type GoroutineManager struct {
-	mu    sync.Mutex
-	tasks map[string]Params
+	mu       sync.Mutex
+	tasks    map[string]Params
+	fullZone map[FullZoneKey]RateLimitEntry
+}
+
+type FullZoneKey struct {
+	Zone string
+	Key  string
 }
 
 type workFunc func(zone string) (Zone, error)
+
+type RateLimitHeader struct {
+	Key          string
+	Now          int64
+	NowMonotonic int64
+}
