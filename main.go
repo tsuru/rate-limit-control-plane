@@ -64,8 +64,8 @@ func main() {
 		for {
 			manager.ListTasks()
 			time.Sleep(time.Second * 5)
-			for _, value := range manager.GetTask() {
-				manager.Run(value)
+			for _, id := range manager.GetTask() {
+				manager.Run(id)
 			}
 		}
 	}()
