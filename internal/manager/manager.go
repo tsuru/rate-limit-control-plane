@@ -5,6 +5,7 @@
 package manager
 
 import (
+	b64 "encoding/base64"
 	"fmt"
 	"time"
 )
@@ -18,8 +19,45 @@ type GoroutineManagerInterface interface {
 var _ GoroutineManagerInterface = &GoroutineManager{}
 
 func NewGoroutine() *GoroutineManager {
-	return &GoroutineManager{
+	gm := GoroutineManager{
 		tasks: map[string]Params{},
+	}
+	go FullZoneSync(&gm)
+	return &gm
+}
+
+func FullZoneSync(gm *GoroutineManager) {
+	for {
+		time.Sleep(5 * time.Second)
+		gm.fullZone = map[FullZoneKey]RateLimitEntry{}
+		for _, task := range gm.tasks {
+			for _, zone := range task.zones {
+				for _, entity := range zone.RateLimitEntries {
+					hashID := FullZoneKey{
+						Zone: zone.Name,
+						Key:  string(entity.Key),
+					}
+					gm.mu.Lock()
+					sEnc := b64.StdEncoding.EncodeToString([]byte(entity.Key))
+					fmt.Println(sEnc)
+
+					if _, exists := gm.fullZone[hashID]; exists {
+						fmt.Println()
+						fullZone := gm.fullZone[hashID]
+						fullZone.Excess += entity.Excess
+						fullZone.Last = entity.Last
+						gm.mu.Unlock()
+						continue
+					}
+					gm.fullZone[hashID] = RateLimitEntry{
+						Key:    entity.Key,
+						Last:   entity.Last,
+						Excess: entity.Excess,
+					}
+					gm.mu.Unlock()
+				}
+			}
+		}
 	}
 }
 
@@ -102,6 +140,10 @@ func (gm *GoroutineManager) ListTasks() {
 		}
 		message += "\n"
 		fmt.Println(message)
+		for _, fullZone := range gm.fullZone {
+			fmt.Printf(" * FullZone: %s - %v\n", fullZone.Key, fullZone)
+		}
+		fmt.Println("========================================")
 	}
 }
 
