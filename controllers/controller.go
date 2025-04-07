@@ -35,7 +35,6 @@ type RateLimitControllerReconcile struct {
 	Log              logr.Logger
 	ManagerGoroutine *manager.GoroutineManager
 	Namespace        string
-	PodCache         sync.Map
 }
 
 func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
