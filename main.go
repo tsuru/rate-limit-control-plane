@@ -6,7 +6,6 @@ package main
 
 import (
 	"os"
-	"time"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	nginxOperatorv1alpha1 "github.com/tsuru/nginx-operator/api/v1alpha1"
@@ -35,7 +34,6 @@ func init() {
 }
 
 func main() {
-
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -60,19 +58,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	go func() {
-		for {
-			manager.ListTasks()
-			time.Sleep(time.Second * 5)
-			for _, id := range manager.GetTask() {
-				manager.Run(id)
-			}
-		}
-	}()
-
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-
 }

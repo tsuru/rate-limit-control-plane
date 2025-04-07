@@ -5,81 +5,62 @@
 package manager
 
 import (
-	b64 "encoding/base64"
 	"fmt"
 	"time"
 )
 
-type GoroutineManagerInterface interface {
-	Start(id string, workFunc workFunc, zones []string)
-	Stop(id string)
-	Run(id string)
-}
-
-var _ GoroutineManagerInterface = &GoroutineManager{}
-
 func NewGoroutine() *GoroutineManager {
 	gm := GoroutineManager{
-		tasks: map[string]Params{},
+		tasks: map[string]*RpaasInstanceSyncWorker{},
 	}
-	go FullZoneSync(&gm)
 	return &gm
 }
 
-func FullZoneSync(gm *GoroutineManager) {
-	for {
-		time.Sleep(5 * time.Second)
-		gm.fullZone = map[FullZoneKey]RateLimitEntry{}
-		for _, task := range gm.tasks {
-			for _, zone := range task.zones {
-				for _, entity := range zone.RateLimitEntries {
-					hashID := FullZoneKey{
-						Zone: zone.Name,
-						Key:  string(entity.Key),
-					}
-					gm.mu.Lock()
-					sEnc := b64.StdEncoding.EncodeToString([]byte(entity.Key))
-					fmt.Println(sEnc)
+// func FullZoneSync(gm *GoroutineManager) {
+// 	for {
+// 		time.Sleep(5 * time.Second)
+// 		gm.fullZone = map[FullZoneKey]RateLimitEntry{}
+// 		for _, task := range gm.tasks {
+// 			for _, zone := range task.zones {
+// 				for _, entity := range zone.RateLimitEntries {
+// 					sEnc := b64.StdEncoding.EncodeToString([]byte(entity.Key))
+// 					hashID := FullZoneKey{
+// 						Zone: zone.Name,
+// 						Key:  sEnc,
+// 					}
+// 					fmt.Println("hashID", hashID)
+// 					gm.mu.Lock()
+//
+// 					if _, exists := gm.fullZone[hashID]; exists {
+// 						fullZone := gm.fullZone[hashID]
+// 						fullZone.Excess += entity.Excess
+// 						fullZone.Last = entity.Last
+// 						gm.mu.Unlock()
+// 						continue
+// 					}
+// 					gm.fullZone[hashID] = RateLimitEntry{
+// 						Key:    entity.Key,
+// 						Last:   entity.Last,
+// 						Excess: entity.Excess,
+// 					}
+// 					gm.mu.Unlock()
+// 				}
+// 			}
+// 		}
+// 		for zoneKey, zone := range gm.fullZone {
+// 			fmt.Printf("FullZone: %v - zone: %v\n", zoneKey, zone)
+// 		}
+// 	}
+// }
 
-					if _, exists := gm.fullZone[hashID]; exists {
-						fmt.Println()
-						fullZone := gm.fullZone[hashID]
-						fullZone.Excess += entity.Excess
-						fullZone.Last = entity.Last
-						gm.mu.Unlock()
-						continue
-					}
-					gm.fullZone[hashID] = RateLimitEntry{
-						Key:    entity.Key,
-						Last:   entity.Last,
-						Excess: entity.Excess,
-					}
-					gm.mu.Unlock()
-				}
-			}
-		}
-	}
-}
-
-func (gm *GoroutineManager) Start(id string, workFunc workFunc, zones []string) {
+func (gm *GoroutineManager) Start(id string, rpaasInstanceWorker *RpaasInstanceSyncWorker) *RpaasInstanceSyncWorker {
 	gm.mu.Lock()
-	if _, exists := gm.tasks[id]; exists {
+	if worker, exists := gm.tasks[id]; exists {
 		gm.mu.Unlock()
-		return
+		return worker
 	}
 	stop := make(chan bool, 1)
-	work := make(chan bool, 1)
-	params := Params{
-		stop: stop,
-		work: work,
-	}
-	for _, zoneName := range zones {
-		params.zones = append(params.zones, Zone{
-			Name:             zoneName,
-			RateLimitEntries: []RateLimitEntry{},
-		})
-	}
-	gm.tasks[id] = params
+	gm.tasks[id] = rpaasInstanceWorker
 	gm.mu.Unlock()
 
 	go func() {
@@ -87,32 +68,22 @@ func (gm *GoroutineManager) Start(id string, workFunc workFunc, zones []string) 
 			select {
 			case <-stop:
 				fmt.Printf("end goroutines %s\n", id)
+				rpaasInstanceWorker.RpaasInstanceSignals.StopChan <- struct{}{}
 				return
-			case <-work:
-				for _, zone := range params.zones {
-					result, err := workFunc(zone.Name)
-					if err != nil {
-						fmt.Printf("error %s\n", err)
-						continue
-					}
-					for i, z := range params.zones {
-						if z.Name == zone.Name {
-							params.zones[i].RateLimitEntries = result.RateLimitEntries
-						}
-					}
-				}
 			default:
 				time.Sleep(1 * time.Second)
 			}
 		}
 	}()
+	go rpaasInstanceWorker.Work()
+	return rpaasInstanceWorker
 }
 
 func (gm *GoroutineManager) Stop(id string) {
 	gm.mu.Lock()
-	if param, exists := gm.tasks[id]; exists {
-		param.stop <- true
-		close(param.stop)
+	if rpaasInstanceWorker, exists := gm.tasks[id]; exists {
+		rpaasInstanceWorker.RpaasInstanceSignals.StopChan <- struct{}{}
+		close(rpaasInstanceWorker.RpaasInstanceSignals.StopChan)
 		delete(gm.tasks, id)
 		fmt.Printf("stopping %s\n", id)
 	} else {
@@ -121,38 +92,30 @@ func (gm *GoroutineManager) Stop(id string) {
 	gm.mu.Unlock()
 }
 
-func (gm *GoroutineManager) Run(id string) {
-	gm.mu.Lock()
-	if param, exists := gm.tasks[id]; exists {
-		param.work <- true
-	}
-	gm.mu.Unlock()
-}
+// func (gm *GoroutineManager) ListTasks() {
+// 	gm.mu.Lock()
+// 	defer gm.mu.Unlock()
+// 	for ip, params := range gm.tasks {
+// 		message := ""
+// 		message += fmt.Sprintf("* ID: %s - ", ip)
+// 		for _, zone := range params.zones {
+// 			message += fmt.Sprintf(" * Zone: %s - - %v", zone.Name, zone.RateLimitEntries)
+// 		}
+// 		message += "\n"
+// 		fmt.Println(message)
+// 		for _, fullZone := range gm.fullZone {
+// 			fmt.Printf(" * FullZone: %s - %v\n", fullZone.Key, fullZone)
+// 		}
+// 		fmt.Println("========================================")
+// 	}
+// }
 
-func (gm *GoroutineManager) ListTasks() {
-	gm.mu.Lock()
-	defer gm.mu.Unlock()
-	for ip, params := range gm.tasks {
-		message := ""
-		message += fmt.Sprintf("* ID: %s - ", ip)
-		for _, zone := range params.zones {
-			message += fmt.Sprintf(" * Zone: %s - - %v", zone.Name, zone.RateLimitEntries)
-		}
-		message += "\n"
-		fmt.Println(message)
-		for _, fullZone := range gm.fullZone {
-			fmt.Printf(" * FullZone: %s - %v\n", fullZone.Key, fullZone)
-		}
-		fmt.Println("========================================")
-	}
-}
-
-func (gm *GoroutineManager) GetTask() []string {
-	gm.mu.Lock()
-	defer gm.mu.Unlock()
-	ips := []string{}
-	for id := range gm.tasks {
-		ips = append(ips, id)
-	}
-	return ips
-}
+// func (gm *GoroutineManager) GetTask() []string {
+// 	gm.mu.Lock()
+// 	defer gm.mu.Unlock()
+// 	ips := []string{}
+// 	for id := range gm.tasks {
+// 		ips = append(ips, id)
+// 	}
+// 	return ips
+// }

@@ -2,8 +2,14 @@ package manager
 
 import "sync"
 
+type Optional[T any] struct {
+	Value T
+	Error error
+}
+
 type Zone struct {
 	Name             string
+	RateLimitHeader  RateLimitHeader
 	RateLimitEntries []RateLimitEntry
 }
 
@@ -20,9 +26,8 @@ type Params struct {
 }
 
 type GoroutineManager struct {
-	mu       sync.Mutex
-	tasks    map[string]Params
-	fullZone map[FullZoneKey]RateLimitEntry
+	mu    sync.Mutex
+	tasks map[string]*RpaasInstanceSyncWorker
 }
 
 type FullZoneKey struct {

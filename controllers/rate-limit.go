@@ -25,11 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	flavor             = "global-ratelimit"
-	administrativePort = 8800
-)
-
 type RateLimitController struct {
 	client.Client
 	Log              logr.Logger
@@ -132,7 +127,6 @@ func (c *RateLimitController) reconcileNginxRateLimitsZone(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	c.ManagerGoroutine.ListTasks()
 	fmt.Printf("---> RATE LIMIT ENTRIES BY POD MAP FOR ZONE %s: %v\n", zone, rateLimitZoneEntriesByPod)
 	c.aggregatRateLimitZoneEntries(rateLimitZoneEntriesByPod)
 	return nil
