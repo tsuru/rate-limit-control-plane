@@ -1,10 +1,14 @@
 package manager
 
-import "sync"
-
 type Optional[T any] struct {
 	Value T
 	Error error
+}
+
+type Worker interface {
+	Start()
+	Stop()
+	GetID() string
 }
 
 type Zone struct {
@@ -23,11 +27,6 @@ type Params struct {
 	stop  chan bool
 	work  chan bool
 	zones []Zone
-}
-
-type GoroutineManager struct {
-	mu    sync.Mutex
-	tasks map[string]*RpaasInstanceSyncWorker
 }
 
 type FullZoneKey struct {

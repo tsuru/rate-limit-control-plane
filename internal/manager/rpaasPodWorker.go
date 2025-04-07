@@ -12,49 +12,61 @@ import (
 const administrativePort = 8800
 
 type RpaasPodWorker struct {
-	PodIP                 string
-	zoneDataChan          chan Optional[Zone]
-	RpaasPodWorkerSignals RpaasPodWorkerSignals
-}
-
-type RpaasPodWorkerSignals struct {
+	PodIP         string
+	PodName       string
+	zoneDataChan  chan Optional[Zone]
 	ReadZoneChan  chan string
 	WriteZoneChan chan Zone
 	StopChan      chan struct{}
 }
 
-func NewRpaasPodWorker(podIP string, zoneDataChan chan Optional[Zone]) *RpaasPodWorker {
-	podWorkerSignals := RpaasPodWorkerSignals{
+func NewRpaasPodWorker(podIP, podName string, zoneDataChan chan Optional[Zone]) *RpaasPodWorker {
+	return &RpaasPodWorker{
+		PodIP:         podIP,
+		PodName:       podName,
+		zoneDataChan:  zoneDataChan,
 		ReadZoneChan:  make(chan string),
 		WriteZoneChan: make(chan Zone),
 		StopChan:      make(chan struct{}),
 	}
-	return &RpaasPodWorker{
-		PodIP:                 podIP,
-		zoneDataChan:          zoneDataChan,
-		RpaasPodWorkerSignals: podWorkerSignals,
+}
+
+func (w *RpaasPodWorker) Start() {
+	go w.Work()
+}
+
+func (w *RpaasPodWorker) Stop() {
+	if w.StopChan != nil {
+		w.StopChan <- struct{}{}
 	}
+}
+
+func (w *RpaasPodWorker) GetID() string {
+	return w.PodName
 }
 
 func (w *RpaasPodWorker) Work() {
 	for {
 		select {
-		case zoneName := <-w.RpaasPodWorkerSignals.ReadZoneChan:
+		case zoneName := <-w.ReadZoneChan:
 			go func() {
 				zoneData, err := w.getZoneData(zoneName)
 				w.zoneDataChan <- Optional[Zone]{Value: zoneData, Error: err}
 			}()
-		case zone := <-w.RpaasPodWorkerSignals.WriteZoneChan:
+		case zone := <-w.WriteZoneChan:
 			fmt.Println("Writing zone data to pod", zone)
 			// TODO: Implement the logic to write zone data to the pod
-		case <-w.RpaasPodWorkerSignals.StopChan:
-			close(w.RpaasPodWorkerSignals.ReadZoneChan)
-			close(w.RpaasPodWorkerSignals.WriteZoneChan)
-			close(w.RpaasPodWorkerSignals.StopChan)
-			close(w.zoneDataChan)
+		case <-w.StopChan:
+			w.cleanup()
 			return
 		}
 	}
+}
+
+func (w *RpaasPodWorker) cleanup() {
+	close(w.ReadZoneChan)
+	close(w.WriteZoneChan)
+	close(w.StopChan)
 }
 
 func (w *RpaasPodWorker) getZoneData(zone string) (Zone, error) {

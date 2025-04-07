@@ -8,12 +8,13 @@ import (
 	"time"
 )
 
+// Update RpaasInstanceSyncWorker to use GoroutineManager for managing pod workers
 type RpaasInstanceSyncWorker struct {
 	sync.Mutex
 	RpaasInstanceName    string
 	Zones                []string
 	RpaasInstanceSignals RpaasInstanceSignals
-	RpaasPodWorkers      map[string]*RpaasPodWorkerSignals
+	PodWorkerManager     *GoroutineManager
 	Ticker               *time.Ticker
 	zoneDataChan         chan Optional[Zone]
 	fullZone             map[FullZoneKey]*RateLimitEntry
@@ -29,14 +30,15 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string) *Rpaas
 	signals := RpaasInstanceSignals{
 		StartRpaasPodWorker: make(chan [2]string),
 		StopRpaasPodWorker:  make(chan string),
+		StopChan:            make(chan struct{}),
 	}
-	// TODO: Correctly set the ticker duration using config
 	ticker := time.NewTicker(10 * time.Second)
+
 	return &RpaasInstanceSyncWorker{
 		RpaasInstanceName:    rpaasInstanceName,
 		Zones:                zones,
 		RpaasInstanceSignals: signals,
-		RpaasPodWorkers:      make(map[string]*RpaasPodWorkerSignals),
+		PodWorkerManager:     NewGoroutineManager(),
 		Ticker:               ticker,
 		zoneDataChan:         make(chan Optional[Zone]),
 		fullZone:             make(map[FullZoneKey]*RateLimitEntry),
@@ -46,62 +48,91 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string) *Rpaas
 func (w *RpaasInstanceSyncWorker) Work() {
 	for {
 		select {
-		case rpaasPodWorkerKeys := <-w.RpaasInstanceSignals.StartRpaasPodWorker:
-			w.Lock()
-			if _, exists := w.RpaasPodWorkers[rpaasPodWorkerKeys[0]]; exists {
-				w.Unlock()
-				continue
-			}
-			podWorker := NewRpaasPodWorker(rpaasPodWorkerKeys[1], w.zoneDataChan)
-			w.RpaasPodWorkers[rpaasPodWorkerKeys[0]] = &podWorker.RpaasPodWorkerSignals
-			w.Unlock()
-			go podWorker.Work()
-		case rpaasPodWorkerKey := <-w.RpaasInstanceSignals.StopRpaasPodWorker:
-			w.Lock()
-			podWorkerSignals, exists := w.RpaasPodWorkers[rpaasPodWorkerKey]
-			if !exists {
-				w.Unlock()
-				continue
-			}
-			podWorkerSignals.StopChan <- struct{}{}
 		case <-w.Ticker.C:
-			for _, zone := range w.Zones {
-				w.Lock()
-				workerNum := len(w.RpaasPodWorkers)
-				for _, podWorker := range w.RpaasPodWorkers {
-					podWorker.ReadZoneChan <- zone
-				}
-				zoneData := []Zone{}
-				for i := 0; i < workerNum; i++ {
-					result := <-w.zoneDataChan
-					if result.Error != nil {
-						log.Fatal(result.Error)
-					}
-					zoneData = append(zoneData, result.Value)
-				}
-				log.Printf("zoneData %+v\n", zoneData)
-				aggregatedZones := w.aggregateZones(zoneData)
-				log.Println("aggregateZones", aggregatedZones)
-				w.Unlock()
-				for _, podWorker := range w.RpaasPodWorkers {
-					podWorker.WriteZoneChan <- aggregatedZones
-				}
-			}
+			w.processTick()
 		case <-w.RpaasInstanceSignals.StopChan:
-			w.Lock()
-			for _, podWorker := range w.RpaasPodWorkers {
-				podWorker.StopChan <- struct{}{}
-			}
-			w.Unlock()
-			close(w.RpaasInstanceSignals.StartRpaasPodWorker)
-			close(w.RpaasInstanceSignals.StopRpaasPodWorker)
-			close(w.RpaasInstanceSignals.StopChan)
-			close(w.zoneDataChan)
-			w.Ticker.Stop()
+			w.cleanup()
 			return
-
 		}
 	}
+}
+
+func (w *RpaasInstanceSyncWorker) processTick() {
+	for _, zone := range w.Zones {
+		w.Lock()
+		podWorkers := w.PodWorkerManager.ListWorkerIDs()
+		workerCount := len(podWorkers)
+
+		if workerCount == 0 {
+			w.Unlock()
+			continue
+		}
+
+		// Process each zone for all pod workers
+		w.PodWorkerManager.ForEachWorker(func(worker Worker) {
+			if podWorker, ok := worker.(*RpaasPodWorker); ok {
+				podWorker.ReadZoneChan <- zone
+			}
+		})
+
+		// Collect zone data from all pod workers
+		zoneData := []Zone{}
+		for i := 0; i < workerCount; i++ {
+			result := <-w.zoneDataChan
+			if result.Error != nil {
+				log.Printf("Error getting zone data: %v", result.Error)
+				continue
+			}
+			zoneData = append(zoneData, result.Value)
+		}
+
+		if len(zoneData) == 0 {
+			w.Unlock()
+			continue
+		}
+
+		// Aggregate zone data
+		aggregatedZone := w.aggregateZones(zoneData)
+		w.Unlock()
+
+		// Write aggregated data back to pod workers
+		w.PodWorkerManager.ForEachWorker(func(worker Worker) {
+			if podWorker, ok := worker.(*RpaasPodWorker); ok {
+				podWorker.WriteZoneChan <- aggregatedZone
+			}
+		})
+	}
+}
+
+func (w *RpaasInstanceSyncWorker) cleanup() {
+	// Stop all pod workers
+	w.PodWorkerManager.ForEachWorker(func(worker Worker) {
+		worker.Stop()
+	})
+
+	// Close all channels
+	close(w.RpaasInstanceSignals.StopChan)
+	close(w.zoneDataChan)
+	w.Ticker.Stop()
+}
+
+func (w *RpaasInstanceSyncWorker) Start() {
+	go w.Work()
+}
+
+func (w *RpaasInstanceSyncWorker) Stop() {
+	if w.RpaasInstanceSignals.StopChan != nil {
+		w.RpaasInstanceSignals.StopChan <- struct{}{}
+	}
+}
+
+func (w *RpaasInstanceSyncWorker) GetID() string {
+	return w.RpaasInstanceName
+}
+
+func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
+	podWorker := NewRpaasPodWorker(podIP, podName, w.zoneDataChan)
+	w.PodWorkerManager.AddWorker(podWorker)
 }
 
 func (w *RpaasInstanceSyncWorker) aggregateZones(zonePerPod []Zone) Zone {

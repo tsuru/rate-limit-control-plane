@@ -48,7 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	manager := manager.NewGoroutine()
+	manager := manager.NewGoroutineManager()
 	if err = (&controllers.RateLimitControllerReconcile{
 		Client:           mgr.GetClient(),
 		Log:              mgr.GetLogger().WithName("controllers").WithName("RateLimitControllerReconcile"),

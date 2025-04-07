@@ -5,117 +5,60 @@
 package manager
 
 import (
-	"fmt"
-	"time"
+	"sync"
 )
 
-func NewGoroutine() *GoroutineManager {
-	gm := GoroutineManager{
-		tasks: map[string]*RpaasInstanceSyncWorker{},
-	}
-	return &gm
+type GoroutineManager struct {
+	mu      sync.Mutex
+	workers map[string]Worker
 }
 
-// func FullZoneSync(gm *GoroutineManager) {
-// 	for {
-// 		time.Sleep(5 * time.Second)
-// 		gm.fullZone = map[FullZoneKey]RateLimitEntry{}
-// 		for _, task := range gm.tasks {
-// 			for _, zone := range task.zones {
-// 				for _, entity := range zone.RateLimitEntries {
-// 					sEnc := b64.StdEncoding.EncodeToString([]byte(entity.Key))
-// 					hashID := FullZoneKey{
-// 						Zone: zone.Name,
-// 						Key:  sEnc,
-// 					}
-// 					fmt.Println("hashID", hashID)
-// 					gm.mu.Lock()
-//
-// 					if _, exists := gm.fullZone[hashID]; exists {
-// 						fullZone := gm.fullZone[hashID]
-// 						fullZone.Excess += entity.Excess
-// 						fullZone.Last = entity.Last
-// 						gm.mu.Unlock()
-// 						continue
-// 					}
-// 					gm.fullZone[hashID] = RateLimitEntry{
-// 						Key:    entity.Key,
-// 						Last:   entity.Last,
-// 						Excess: entity.Excess,
-// 					}
-// 					gm.mu.Unlock()
-// 				}
-// 			}
-// 		}
-// 		for zoneKey, zone := range gm.fullZone {
-// 			fmt.Printf("FullZone: %v - zone: %v\n", zoneKey, zone)
-// 		}
-// 	}
-// }
+func NewGoroutineManager() *GoroutineManager {
+	return &GoroutineManager{
+		workers: make(map[string]Worker),
+	}
+}
 
-func (gm *GoroutineManager) Start(id string, rpaasInstanceWorker *RpaasInstanceSyncWorker) *RpaasInstanceSyncWorker {
+func (gm *GoroutineManager) AddWorker(worker Worker) {
 	gm.mu.Lock()
-	if worker, exists := gm.tasks[id]; exists {
-		gm.mu.Unlock()
-		return worker
+	defer gm.mu.Unlock()
+	id := worker.GetID()
+	if _, exists := gm.workers[id]; !exists {
+		gm.workers[id] = worker
+		go worker.Start()
 	}
-	stop := make(chan bool, 1)
-	gm.tasks[id] = rpaasInstanceWorker
-	gm.mu.Unlock()
-
-	go func() {
-		for {
-			select {
-			case <-stop:
-				fmt.Printf("end goroutines %s\n", id)
-				rpaasInstanceWorker.RpaasInstanceSignals.StopChan <- struct{}{}
-				return
-			default:
-				time.Sleep(1 * time.Second)
-			}
-		}
-	}()
-	go rpaasInstanceWorker.Work()
-	return rpaasInstanceWorker
 }
 
-func (gm *GoroutineManager) Stop(id string) {
+func (gm *GoroutineManager) RemoveWorker(id string) {
 	gm.mu.Lock()
-	if rpaasInstanceWorker, exists := gm.tasks[id]; exists {
-		rpaasInstanceWorker.RpaasInstanceSignals.StopChan <- struct{}{}
-		close(rpaasInstanceWorker.RpaasInstanceSignals.StopChan)
-		delete(gm.tasks, id)
-		fmt.Printf("stopping %s\n", id)
-	} else {
-		fmt.Printf("not found %s\n", id)
+	defer gm.mu.Unlock()
+	if worker, exists := gm.workers[id]; exists {
+		worker.Stop()
+		delete(gm.workers, id)
 	}
-	gm.mu.Unlock()
 }
 
-// func (gm *GoroutineManager) ListTasks() {
-// 	gm.mu.Lock()
-// 	defer gm.mu.Unlock()
-// 	for ip, params := range gm.tasks {
-// 		message := ""
-// 		message += fmt.Sprintf("* ID: %s - ", ip)
-// 		for _, zone := range params.zones {
-// 			message += fmt.Sprintf(" * Zone: %s - - %v", zone.Name, zone.RateLimitEntries)
-// 		}
-// 		message += "\n"
-// 		fmt.Println(message)
-// 		for _, fullZone := range gm.fullZone {
-// 			fmt.Printf(" * FullZone: %s - %v\n", fullZone.Key, fullZone)
-// 		}
-// 		fmt.Println("========================================")
-// 	}
-// }
+func (gm *GoroutineManager) GetWorker(id string) (Worker, bool) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	worker, exists := gm.workers[id]
+	return worker, exists
+}
 
-// func (gm *GoroutineManager) GetTask() []string {
-// 	gm.mu.Lock()
-// 	defer gm.mu.Unlock()
-// 	ips := []string{}
-// 	for id := range gm.tasks {
-// 		ips = append(ips, id)
-// 	}
-// 	return ips
-// }
+func (gm *GoroutineManager) ListWorkerIDs() []string {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	ids := make([]string, 0, len(gm.workers))
+	for id := range gm.workers {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func (gm *GoroutineManager) ForEachWorker(f func(Worker)) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+	for _, worker := range gm.workers {
+		f(worker)
+	}
+}

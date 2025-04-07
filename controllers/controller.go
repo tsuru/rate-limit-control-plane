@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -79,8 +78,17 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	rpaasInstanceWorker := r.ManagerGoroutine.Start(rpaasInstanceName, manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, zoneNames))
-	rpaasInstanceWorker.RpaasInstanceSignals.StartRpaasPodWorker <- [2]string{pod.Name, pod.Status.PodIP}
+	worker, exists := r.ManagerGoroutine.GetWorker(rpaasInstanceName)
+	if !exists {
+		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, zoneNames)
+		r.ManagerGoroutine.AddWorker(worker)
+	}
+	// convert worker to RpaasInstanceSyncWorker
+	rpaasInstanceSyncWorker, ok := worker.(*manager.RpaasInstanceSyncWorker)
+	if ok {
+		rpaasInstanceSyncWorker.AddPodWorker(pod.Status.PodIP, pod.Name)
+	}
+
 	r.Log.Info("pod started", "namespace", req.Namespace, "name", req.Name, "podIP", pod.Status.PodIP)
 	return ctrl.Result{}, nil
 }
