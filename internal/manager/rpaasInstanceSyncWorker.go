@@ -4,8 +4,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net"
 	"sync"
 	"time"
+
+	"github.com/tsuru/rate-limit-control-plane/server"
 )
 
 // Update RpaasInstanceSyncWorker to use GoroutineManager for managing pod workers
@@ -18,6 +21,7 @@ type RpaasInstanceSyncWorker struct {
 	Ticker               *time.Ticker
 	zoneDataChan         chan Optional[Zone]
 	fullZone             map[FullZoneKey]*RateLimitEntry
+	notify               chan server.Data
 }
 
 type RpaasInstanceSignals struct {
@@ -26,7 +30,7 @@ type RpaasInstanceSignals struct {
 	StopChan            chan struct{}
 }
 
-func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string) *RpaasInstanceSyncWorker {
+func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, notify chan server.Data) *RpaasInstanceSyncWorker {
 	signals := RpaasInstanceSignals{
 		StartRpaasPodWorker: make(chan [2]string),
 		StopRpaasPodWorker:  make(chan string),
@@ -42,6 +46,7 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string) *Rpaas
 		Ticker:               ticker,
 		zoneDataChan:         make(chan Optional[Zone]),
 		fullZone:             make(map[FullZoneKey]*RateLimitEntry),
+		notify:               notify,
 	}
 }
 
@@ -95,6 +100,13 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		aggregatedZone := w.aggregateZones(zoneData)
 		w.Unlock()
 
+		for _, entry := range aggregatedZone.RateLimitEntries {
+			w.notify <- server.Data{
+				ID:     net.IP(entry.Key).String(),
+				Last:   entry.Last,
+				Excess: entry.Excess,
+			}
+		}
 		// Write aggregated data back to pod workers
 		w.PodWorkerManager.ForEachWorker(func(worker Worker) {
 			if podWorker, ok := worker.(*RpaasPodWorker); ok {
