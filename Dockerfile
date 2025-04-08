@@ -19,3 +19,5 @@ WORKDIR /root/
 COPY --from=builder /app .
 
 CMD ["./rate-limit-control-plane"]
+
+EXPOSE 3000

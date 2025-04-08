@@ -11,6 +11,7 @@ import (
 	nginxOperatorv1alpha1 "github.com/tsuru/nginx-operator/api/v1alpha1"
 	"github.com/tsuru/rate-limit-control-plane/controllers"
 	"github.com/tsuru/rate-limit-control-plane/internal/manager"
+	"github.com/tsuru/rate-limit-control-plane/server"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"k8s.io/api/node/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,12 +48,14 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
-
+	ch := make(chan server.Data, 99999)
+	go server.Notification(ch)
 	manager := manager.NewGoroutineManager()
 	if err = (&controllers.RateLimitControllerReconcile{
 		Client:           mgr.GetClient(),
 		Log:              mgr.GetLogger().WithName("controllers").WithName("RateLimitControllerReconcile"),
 		ManagerGoroutine: manager,
+		Notify:           ch,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitControllerReconcile")
 		os.Exit(1)
