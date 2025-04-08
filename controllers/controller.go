@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/tsuru/rate-limit-control-plane/internal/manager"
+	"github.com/tsuru/rate-limit-control-plane/server"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"github.com/vmihailenco/msgpack/v5"
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +35,7 @@ type RateLimitControllerReconcile struct {
 	Log              logr.Logger
 	ManagerGoroutine *manager.GoroutineManager
 	Namespace        string
+	Notify           chan server.Data
 }
 
 func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -77,10 +79,9 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 		r.Log.Info("no rate limiting zones found", "namespace", req.Namespace, "name", req.Name)
 		return ctrl.Result{}, nil
 	}
-
 	worker, exists := r.ManagerGoroutine.GetWorker(rpaasInstanceName)
 	if !exists {
-		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, zoneNames)
+		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, zoneNames, r.Notify)
 		r.ManagerGoroutine.AddWorker(worker)
 	}
 	// convert worker to RpaasInstanceSyncWorker
@@ -123,7 +124,6 @@ func (r *RateLimitControllerReconcile) getNginxRateLimitZoneEntries(nginxInstanc
 		}, nil
 	}
 }
-
 func (c *RateLimitControllerReconcile) getNginxRateLimitingZones(nginxInstance *corev1.Pod) ([]string, error) {
 	zones := []string{}
 	endpoint := fmt.Sprintf("http://%s:%d/%s", nginxInstance.Status.PodIP, administrativePort, "rate-limit")
