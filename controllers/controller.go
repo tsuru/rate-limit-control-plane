@@ -7,14 +7,12 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/tsuru/rate-limit-control-plane/internal/manager"
-	"github.com/tsuru/rate-limit-control-plane/server"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"github.com/vmihailenco/msgpack/v5"
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +33,7 @@ type RateLimitControllerReconcile struct {
 	Log              logr.Logger
 	ManagerGoroutine *manager.GoroutineManager
 	Namespace        string
-	Notify           chan server.Data
+	Notify           chan manager.RpaasZoneData
 }
 
 func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -94,36 +92,6 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitControllerReconcile) getNginxRateLimitZoneEntries(nginxInstance *corev1.Pod) func(zone string) (manager.Zone, error) {
-	return func(zone string) (manager.Zone, error) {
-		endpoint := fmt.Sprintf("http://%s:%d/%s/%s", nginxInstance.Status.PodIP, administrativePort, "rate-limit", zone)
-		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-		if err != nil {
-			return manager.Zone{}, err
-		}
-		response, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return manager.Zone{}, err
-		}
-		defer response.Body.Close()
-		var rateLimitEntries []manager.RateLimitEntry
-		decoder := msgpack.NewDecoder(response.Body)
-		for {
-			var message manager.RateLimitEntry
-			if err := decoder.Decode(&message); err != nil {
-				if err == io.EOF {
-					break
-				}
-				return manager.Zone{}, err
-			}
-			rateLimitEntries = append(rateLimitEntries, message)
-		}
-		return manager.Zone{
-			Name:             zone,
-			RateLimitEntries: rateLimitEntries,
-		}, nil
-	}
-}
 func (c *RateLimitControllerReconcile) getNginxRateLimitingZones(nginxInstance *corev1.Pod) ([]string, error) {
 	zones := []string{}
 	endpoint := fmt.Sprintf("http://%s:%d/%s", nginxInstance.Status.PodIP, administrativePort, "rate-limit")

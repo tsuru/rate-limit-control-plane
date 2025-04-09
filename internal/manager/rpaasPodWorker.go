@@ -11,6 +11,11 @@ import (
 
 const administrativePort = 8800
 
+const (
+	binaryRemoteAddress = "$binary_remote_addr"
+	remoteAddress       = "$remote_addr"
+)
+
 type RpaasPodWorker struct {
 	PodIP         string
 	PodName       string
@@ -53,8 +58,7 @@ func (w *RpaasPodWorker) Work() {
 				zoneData, err := w.getZoneData(zoneName)
 				w.zoneDataChan <- Optional[Zone]{Value: zoneData, Error: err}
 			}()
-		case zone := <-w.WriteZoneChan:
-			fmt.Println("Writing zone data to pod", zone)
+		case _ = <-w.WriteZoneChan:
 			// TODO: Implement the logic to write zone data to the pod
 		case <-w.StopChan:
 			w.cleanup()

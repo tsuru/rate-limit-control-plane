@@ -1,42 +1,49 @@
 package server
 
 import (
-	"encoding/json"
+	"fmt"
 	"log"
+	"time"
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/tsuru/rate-limit-control-plane/internal/repository"
 )
 
-func Notification(ch chan Data) {
+func Notification(repo *repository.ZoneDataRepository) {
 	app := fiber.New()
 
-	app.Use("/ws", func(c *fiber.Ctx) error {
+	app.Server().LogAllErrors = true
+	app.Use(logger.New(logger.Config{
+		Format:     "[${time}] ${status} - ${latency} ${method} ${path}\n",
+		TimeFormat: time.RFC3339,
+		TimeZone:   "Local",
+	}))
+
+	app.Use("/ws/:rpaasName", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
+			log.Printf("WS upgrade requested for rpaasName: %s\n", c.Params("rpaasName"))
 			c.Locals("allowed", true)
 			return c.Next()
 		}
 		return fiber.ErrUpgradeRequired
 	})
 
-	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
-		for value := range ch {
-			data := []Data{
-				{
-					ID:     value.ID,
-					Last:   value.Last,
-					Excess: value.Excess,
-				},
-			}
-			msg, err := json.Marshal(data)
-			if err != nil {
-				log.Println("Error marshaling JSON:", err)
-				return
-			}
-			if err := c.WriteMessage(websocket.TextMessage, msg); err != nil {
+	app.Get("/ws/:rpaasName", websocket.New(func(c *websocket.Conn) {
+		rpaasName := c.Params("rpaasName")
+		fmt.Printf("Connected to rpaasName: %s\n", rpaasName)
+		data, ok := repo.GetRpaasZoneData(rpaasName)
+		fmt.Printf("Data for rpaasName: %s, ok: %v\n", rpaasName, ok)
+		if !ok {
+			if err := c.WriteMessage(websocket.TextMessage, []byte("Not Found")); err != nil {
 				log.Println("Error sending message:", err)
 				return
 			}
+		}
+		if err := c.WriteMessage(websocket.TextMessage, data); err != nil {
+			log.Println("Error sending message:", err)
+			return
 		}
 	}))
 
@@ -71,7 +78,7 @@ func Notification(ch chan Data) {
 
 				<script>
 					console.log("ws://" + window.location.host + "/ws")
-					const ws = new WebSocket("ws://" + window.location.host + "/ws");
+					const ws = new WebSocket("ws://" + window.location.host + "/ws/global-ratelimit-test");
 					const tableBody = document.getElementById("table-body");
 
 					ws.onmessage = function(event) {

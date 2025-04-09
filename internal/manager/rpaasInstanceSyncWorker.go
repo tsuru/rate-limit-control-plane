@@ -1,14 +1,10 @@
 package manager
 
 import (
-	"encoding/base64"
 	"fmt"
 	"log"
-	"net"
 	"sync"
 	"time"
-
-	"github.com/tsuru/rate-limit-control-plane/server"
 )
 
 // Update RpaasInstanceSyncWorker to use GoroutineManager for managing pod workers
@@ -20,8 +16,7 @@ type RpaasInstanceSyncWorker struct {
 	PodWorkerManager     *GoroutineManager
 	Ticker               *time.Ticker
 	zoneDataChan         chan Optional[Zone]
-	fullZone             map[FullZoneKey]*RateLimitEntry
-	notify               chan server.Data
+	notify               chan RpaasZoneData
 }
 
 type RpaasInstanceSignals struct {
@@ -30,7 +25,7 @@ type RpaasInstanceSignals struct {
 	StopChan            chan struct{}
 }
 
-func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, notify chan server.Data) *RpaasInstanceSyncWorker {
+func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, notify chan RpaasZoneData) *RpaasInstanceSyncWorker {
 	signals := RpaasInstanceSignals{
 		StartRpaasPodWorker: make(chan [2]string),
 		StopRpaasPodWorker:  make(chan string),
@@ -45,7 +40,6 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, notify
 		PodWorkerManager:     NewGoroutineManager(),
 		Ticker:               ticker,
 		zoneDataChan:         make(chan Optional[Zone]),
-		fullZone:             make(map[FullZoneKey]*RateLimitEntry),
 		notify:               notify,
 	}
 }
@@ -63,6 +57,10 @@ func (w *RpaasInstanceSyncWorker) Work() {
 }
 
 func (w *RpaasInstanceSyncWorker) processTick() {
+	rpaasZoneData := RpaasZoneData{
+		RpaasName: w.RpaasInstanceName,
+		Data:      []Zone{},
+	}
 	for _, zone := range w.Zones {
 		w.Lock()
 		podWorkers := w.PodWorkerManager.ListWorkerIDs()
@@ -100,13 +98,8 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		aggregatedZone := w.aggregateZones(zoneData)
 		w.Unlock()
 
-		for _, entry := range aggregatedZone.RateLimitEntries {
-			w.notify <- server.Data{
-				ID:     net.IP(entry.Key).String(),
-				Last:   entry.Last,
-				Excess: entry.Excess,
-			}
-		}
+		rpaasZoneData.Data = append(rpaasZoneData.Data, aggregatedZone)
+
 		// Write aggregated data back to pod workers
 		w.PodWorkerManager.ForEachWorker(func(worker Worker) {
 			if podWorker, ok := worker.(*RpaasPodWorker); ok {
@@ -114,6 +107,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 			}
 		})
 	}
+	w.notify <- rpaasZoneData
 }
 
 func (w *RpaasInstanceSyncWorker) cleanup() {
@@ -151,16 +145,16 @@ func (w *RpaasInstanceSyncWorker) aggregateZones(zonePerPod []Zone) Zone {
 	newFullZone := make(map[FullZoneKey]*RateLimitEntry)
 	for _, podZone := range zonePerPod {
 		for _, entity := range podZone.RateLimitEntries {
-			sEnc := base64.StdEncoding.EncodeToString([]byte(entity.Key))
+			fmt.Println("aggregateZones: podZone.RateLimitHeader", podZone.RateLimitHeader)
 			hashID := FullZoneKey{
 				Zone: podZone.Name,
-				Key:  sEnc,
+				Key:  entity.Key.String(podZone.RateLimitHeader),
 			}
 			// TODO: Maybe, for the newFullZone, we dont need to check if the entry exists. Check later
 			if entry, exists := newFullZone[hashID]; exists {
 				entry.Excess += entity.Excess
 				// TODO: Use max value
-				entry.Last = entity.Last
+				entry.Last = max(entry.Last, entity.Last)
 			} else {
 				newFullZone[hashID] = &RateLimitEntry{
 					Key:    entity.Key,
@@ -170,17 +164,21 @@ func (w *RpaasInstanceSyncWorker) aggregateZones(zonePerPod []Zone) Zone {
 			}
 		}
 	}
-	fmt.Printf("New Full Zone %+v\n", newFullZone)
-	var zone Zone
-	zone.Name = zonePerPod[0].Name
-	zone.RateLimitEntries = make([]RateLimitEntry, 0, len(newFullZone))
+	zone := Zone{
+		Name:             zonePerPod[0].Name,
+		RateLimitHeader:  zonePerPod[0].RateLimitHeader,
+		RateLimitEntries: make([]RateLimitEntry, 0, len(newFullZone)),
+	}
 	for _, entry := range newFullZone {
-		fmt.Println("Accumulated Excess", entry.Excess)
 		entry.Excess = entry.Excess / int64(len(zonePerPod))
-		fmt.Println("Average Excess", entry.Excess)
-
 		zone.RateLimitEntries = append(zone.RateLimitEntries, *entry)
 	}
-	w.fullZone = newFullZone
 	return zone
+}
+
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }

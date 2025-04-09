@@ -1,4 +1,4 @@
-package server
+package repository
 
 type Data struct {
 	ID     string `json:"id"`
