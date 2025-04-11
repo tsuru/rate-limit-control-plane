@@ -4,16 +4,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/template/html/v2"
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
 )
 
 func Notification(repo *repository.ZoneDataRepository) {
-	app := fiber.New()
+	// Initialize template engine
+	engine := html.New("./views", ".html")
+
+	app := fiber.New(fiber.Config{
+		Views: engine,
+	})
 
 	app.Server().LogAllErrors = true
 	app.Use(logger.New(logger.Config{
@@ -22,64 +29,20 @@ func Notification(repo *repository.ZoneDataRepository) {
 		TimeZone:   "Local",
 	}))
 
+	// Setup static files
+	app.Static("/static", "./static")
+
 	app.Get("/", func(c *fiber.Ctx) error {
 		instances := repo.ListInstances()
-		b, err := json.Marshal(instances)
+		instancesJSON, err := json.Marshal(instances)
 		if err != nil {
 			log.Println("Error marshaling JSON:", err)
 			return c.Status(fiber.StatusInternalServerError).SendString("Error marshaling JSON")
 		}
-		return c.Type("html").SendString(fmt.Sprintf(`
-		<!DOCTYPE html>
-			<html lang="en">
-			<head>
-				<meta charset="UTF-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<title>Instances</title>
-				<script src="https://cdn.tailwindcss.com"></script>
-			</head>
-			<body class="bg-gray-900 text-white min-h-screen p-6">
-				<div class="max-w-5xl mx-auto">
-					<h1 class="text-3xl font-bold mb-6">Instances</h1>
-					<div class="overflow-y-auto max-h-[70vh] border border-gray-700 rounded-lg">
-						<table class="min-w-full text-sm text-left">
-							<thead class="bg-gray-800 text-gray-300 sticky top-0">
-								<tr>
-									<th class="px-6 py-3">Name</th>
-								</tr>
-							</thead>
-							<tbody id="table-body" class="bg-gray-900 divide-y divide-gray-700">
-								<!-- Rows go here -->
-							</tbody>
-						</table>
-					</div>
-				</div>
 
-				<script>
-					const tableBody = document.getElementById("table-body");
-
-					const data = %s;
-					tableBody.innerHTML = "";
-					console.log(data);
-					data.forEach(item => {
-						const row = document.createElement("tr");
-						
-						const idName = document.createElement("td");
-						idName.className = "px-6 py-4";
-
-						const link = document.createElement("a");
-						link.href = %s;
-						link.textContent = item;
-						link.className = "text-blue-600 hover:underline";
-
-						idName.appendChild(link);
-						row.appendChild(idName);
-						tableBody.appendChild(row);
-					});
-				</script>
-			</body>
-			</html>
-		`, b, "`/instances/${item}`"))
+		return c.Render("index", fiber.Map{
+			"InstancesJSON": string(instancesJSON),
+		})
 	})
 
 	app.Use("/ws/:rpaasName", func(c *fiber.Ctx) error {
@@ -113,71 +76,36 @@ func Notification(repo *repository.ZoneDataRepository) {
 
 	app.Get("/instances/:instance", func(c *fiber.Ctx) error {
 		instance := c.Params("instance")
-		return c.Type("html").SendString(
-			fmt.Sprintf(`
-			<!DOCTYPE html>
-			<html lang="en">
-			<head>
-				<meta charset="UTF-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<title>Zone Table</title>
-				<script src="https://cdn.tailwindcss.com"></script>
-			</head>
-			<body class="bg-gray-900 text-white min-h-screen p-6">
-				<div class="max-w-5xl mx-auto">
-					<h1 class="text-3xl font-bold mb-6">Zone Table</h1>
-					<div class="overflow-y-auto max-h-[70vh] border border-gray-700 rounded-lg">
-						<table class="min-w-full text-sm text-left">
-							<thead class="bg-gray-800 text-gray-300 sticky top-0">
-								<tr>
-									<th class="px-6 py-3">ID</th>
-									<th class="px-6 py-3">Last</th>
-									<th class="px-6 py-3">Excess</th>
-								</tr>
-							</thead>
-							<tbody id="table-body" class="bg-gray-900 divide-y divide-gray-700">
-								<!-- Rows go here -->
-							</tbody>
-						</table>
-					</div>
-				</div>
-
-				<script>
-					console.log("ws://" + window.location.host + "/ws")
-					const ws = new WebSocket("ws://" + window.location.host + "/ws/%s");
-					const tableBody = document.getElementById("table-body");
-
-					ws.onmessage = function(event) {
-						const data = JSON.parse(event.data);
-						tableBody.innerHTML = ""; // clear previous rows
-						data.forEach(item => {
-							const row = document.createElement("tr");
-
-							const idCell = document.createElement("td");
-							idCell.textContent = item.id;
-							idCell.className = "px-6 py-4";
-
-							const lastCell = document.createElement("td");
-							lastCell.textContent = item.last;
-							lastCell.className = "px-6 py-4";
-
-							const excessCell = document.createElement("td");
-							excessCell.textContent = item.excess;
-							excessCell.className = "px-6 py-4";
-
-							row.appendChild(idCell);
-							row.appendChild(lastCell);
-							row.appendChild(excessCell);
-
-							tableBody.appendChild(row);
-						});
-					};
-				</script>
-			</body>
-			</html>
-		`, instance))
+		return c.Render("instance", fiber.Map{
+			"Instance": instance,
+		})
 	})
+
+	// Create necessary directories and files
+	setupStaticFiles()
 
 	log.Println("Server started at http://localhost:3000")
 	log.Fatal(app.Listen(":3000"))
+}
+
+func setupStaticFiles() {
+	// Create directories
+	dirs := []string{
+		"views",
+		"static/js",
+		"static/css",
+	}
+
+	for _, dir := range dirs {
+		createDirIfNotExists(dir)
+	}
+}
+
+func createDirIfNotExists(dir string) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		err := os.MkdirAll(dir, os.ModePerm)
+		if err != nil {
+			log.Printf("Error creating directory %s: %v\n", dir, err)
+		}
+	}
 }
