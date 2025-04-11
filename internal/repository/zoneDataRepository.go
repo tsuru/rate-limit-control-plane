@@ -45,8 +45,6 @@ func (z *ZoneDataRepository) StartReader() {
 			continue
 		}
 		z.Data[rpaasZoneData.RpaasName] = dataBytes
-		fmt.Printf("RpaasName: %s, Data: %s\n", rpaasZoneData.RpaasName, string(dataBytes))
-		fmt.Println(z.Data)
 		z.Unlock()
 	}
 }
