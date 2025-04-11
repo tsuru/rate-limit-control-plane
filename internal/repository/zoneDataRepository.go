@@ -57,3 +57,13 @@ func (z *ZoneDataRepository) GetRpaasZoneData(rpaasName string) ([]byte, bool) {
 	dataBytes, exists := z.Data[rpaasName]
 	return dataBytes, exists
 }
+
+func (z *ZoneDataRepository) ListInstances() []string {
+	z.Lock()
+	defer z.Unlock()
+	instance := make([]string, 0, len(z.Data))
+	for key := range z.Data {
+		instance = append(instance, key)
+	}
+	return instance
+}
