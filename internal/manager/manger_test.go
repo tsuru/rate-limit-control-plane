@@ -11,100 +11,55 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestManagerGoRoutines(t *testing.T) {
-	funcWork := func(zone string) (Zone, error) { return Zone{}, nil }
+type work struct {
+	ID string
+}
 
+func (work) Start() {
+	fmt.Println("start")
+}
+
+func (work) Stop() {
+	fmt.Println("stop")
+}
+
+func (w work) GetID() string {
+	return w.ID
+}
+
+func (w *work) SetID(id string) {
+	w.ID = id
+}
+
+func TestManagerGoRoutines(t *testing.T) {
 	t.Run("should create go routines", func(t *testing.T) {
 		assert := assert.New(t)
-		manager := NewGoroutine()
-		assert.Len(manager.tasks, 0)
-		manager.Start("1", funcWork, []string{"zone1"})
-		assert.Len(manager.tasks, 1)
-		manager.Start("1", funcWork, []string{"zone1"})
-		assert.Len(manager.tasks, 1)
-		manager.Start("2", funcWork, []string{"zone2"})
-		assert.Len(manager.tasks, 2)
+		manager := NewGoroutineManager()
+		assert.Len(manager.workers, 0)
+
+		w := work{ID: "1"}
+		w2 := work{ID: "2"}
+
+		manager.AddWorker(w)
+		assert.Len(manager.workers, 1)
+
+		manager.AddWorker(w2)
+		assert.Len(manager.workers, 2)
 	})
 
-	t.Run("should stop go routines", func(t *testing.T) {
+	t.Run("should remove work", func(t *testing.T) {
 		assert := assert.New(t)
-		manager := NewGoroutine()
-		manager.Start("1", funcWork, []string{"zone1"})
-		manager.Start("2", funcWork, []string{"zone2"})
-		assert.Len(manager.tasks, 2)
-		manager.Stop("1")
-
-		assert.Len(manager.tasks, 1)
-		_, ok := manager.tasks["2"]
-		assert.True(ok)
-		_, ok = manager.tasks["1"]
-		assert.False(ok)
+		manager := NewGoroutineManager()
+		w1 := work{ID: "1"}
+		w2 := work{ID: "2"}
+		manager.AddWorker(w1)
+		assert.Len(manager.workers, 1)
+		manager.AddWorker(w2)
+		assert.Len(manager.workers, 2)
+		manager.RemoveWorker("1")
+		assert.Len(manager.workers, 1)
+		ids := manager.ListWorkerIDs()
+		assert.Equal("2", ids[0])
 	})
 
-	t.Run("should execute work", func(t *testing.T) {
-		assert := assert.New(t)
-		countWork := 0
-		ch := make(chan bool)
-		work := func(zone string) (Zone, error) {
-			countWork++
-			fmt.Println("*")
-			<-ch
-			return Zone{}, nil
-		}
-		manager := NewGoroutine()
-		manager.Start("1", work, []string{"zone1"})
-		manager.Run("1")
-		ch <- true
-		assert.Equal(1, countWork)
-		assert.Len(manager.tasks, 1)
-	})
-
-	t.Run("should execute work with two start", func(t *testing.T) {
-		assert := assert.New(t)
-		countWork := 0
-		ch := make(chan bool)
-		work := func(zone string) (Zone, error) {
-			countWork++
-			fmt.Println("*")
-			<-ch
-			return Zone{}, nil
-		}
-		manager := NewGoroutine()
-		manager.Start("1", work, []string{"zone1"})
-		manager.Start("1", work, []string{"zone1"})
-		manager.Run("1")
-		ch <- true
-		assert.Equal(1, countWork)
-		assert.Len(manager.tasks, 1)
-	})
-
-	t.Run("should execute two work with", func(t *testing.T) {
-		assert := assert.New(t)
-		countWork := 0
-		ch := make(chan bool)
-		work := func(zone string) (Zone, error) {
-			countWork++
-			<-ch
-			return Zone{}, nil
-		}
-		manager := NewGoroutine()
-		manager.Start("1", work, []string{"zone1"})
-		manager.Run("1")
-		ch <- true
-		assert.Equal(1, countWork)
-		assert.Len(manager.tasks, 1)
-
-		countWork2 := 0
-		ch2 := make(chan bool)
-		work2 := func(zone string) (Zone, error) {
-			countWork2++
-			<-ch2
-			return Zone{}, nil
-		}
-		manager.Start("2", work2, []string{"zone2"})
-		manager.Run("2")
-		ch2 <- true
-		assert.Equal(1, countWork2)
-		assert.Len(manager.tasks, 2)
-	})
 }
