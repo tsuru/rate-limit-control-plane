@@ -87,6 +87,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (Zone, error) {
 	decoder := msgpack.NewDecoder(response.Body)
 	var rateLimitHeader RateLimitHeader
 	rateLimitEntries := []RateLimitEntry{}
+	// TODO: Convert last monotonic to global time using header
 	if err := decoder.Decode(&rateLimitHeader); err != nil {
 		if err == io.EOF {
 			return Zone{

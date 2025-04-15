@@ -141,6 +141,20 @@ func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
 	w.PodWorkerManager.AddWorker(podWorker)
 }
 
+func (w *RpaasInstanceSyncWorker) RemovePodWorker(podName string) error {
+	if ok := w.PodWorkerManager.RemoveWorker(podName); !ok {
+		return fmt.Errorf("pod worker not found: %s", podName)
+	}
+	return nil
+}
+
+// TODO: Manter os valores da ultima agregacao
+// TODO: Utilizar os valores da ultima agregacao para calcular o delta
+// TODO: Enviar o delta (calculado) para o pod worker
+// Formula: EXCESS' = EXCESS + SOMATORIO(EXCESS - Pod.Excess)
+// Se o EXCESS' for menor que 0, zerar o EXCESS' e manter o LAST
+// Pegar o maior valor do LAST entre os pods
+// TODO: Se o excess e o last forem iguais, ignorar o POD
 func (w *RpaasInstanceSyncWorker) aggregateZones(zonePerPod []Zone) Zone {
 	newFullZone := make(map[FullZoneKey]*RateLimitEntry)
 	for _, podZone := range zonePerPod {
@@ -150,10 +164,8 @@ func (w *RpaasInstanceSyncWorker) aggregateZones(zonePerPod []Zone) Zone {
 				Zone: podZone.Name,
 				Key:  entity.Key.String(podZone.RateLimitHeader),
 			}
-			// TODO: Maybe, for the newFullZone, we dont need to check if the entry exists. Check later
 			if entry, exists := newFullZone[hashID]; exists {
 				entry.Excess += entity.Excess
-				// TODO: Use max value
 				entry.Last = max(entry.Last, entity.Last)
 			} else {
 				newFullZone[hashID] = &RateLimitEntry{
@@ -170,7 +182,6 @@ func (w *RpaasInstanceSyncWorker) aggregateZones(zonePerPod []Zone) Zone {
 		RateLimitEntries: make([]RateLimitEntry, 0, len(newFullZone)),
 	}
 	for _, entry := range newFullZone {
-		entry.Excess = entry.Excess / int64(len(zonePerPod))
 		zone.RateLimitEntries = append(zone.RateLimitEntries, *entry)
 	}
 	return zone

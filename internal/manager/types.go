@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"fmt"
 	"net"
 )
 
@@ -37,10 +36,6 @@ type RateLimitEntry struct {
 type Key []byte
 
 func (r Key) String(header RateLimitHeader) string {
-	fmt.Println("===================")
-	fmt.Println(header, net.IP(r).String(), string(r))
-	fmt.Println(binaryRemoteAddress, remoteAddress)
-	fmt.Println("===================")
 	switch header.Key {
 	case binaryRemoteAddress:
 		return net.IP(r).String()

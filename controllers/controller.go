@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -43,6 +44,31 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			r.Log.Info("pod not found", "namespace", req.Namespace, "name", req.Name)
+			parts := strings.Split(req.Name, "-")
+			if len(parts) < 3 {
+				r.Log.Info("pod name does not match expected pattern", "name", req.Name)
+				return ctrl.Result{}, nil
+			}
+			instanceName := strings.Join(parts[:len(parts)-2], "-")
+			worker, ok := r.ManagerGoroutine.GetWorker(instanceName)
+			if !ok {
+				r.Log.Info("worker not found", "instanceName", instanceName, "reuestName", req.Name)
+				return ctrl.Result{}, nil
+			}
+			rpaasInstanceSyncWorker, ok := worker.(*manager.RpaasInstanceSyncWorker)
+			if !ok {
+				r.Log.Info("worker is not RpaasInstanceSyncWorker", "instanceName", instanceName, "requestName", req.Name)
+				return ctrl.Result{}, nil
+			}
+			if err := rpaasInstanceSyncWorker.RemovePodWorker(req.Name); err != nil {
+				r.Log.Info("RpaasPodWorker not found", "instanceName", instanceName, "requestName", req.Name)
+				return ctrl.Result{}, nil
+			}
+			return ctrl.Result{}, nil
+		}
+		r.Log.Error(err, "Failed to get pod", "namespace", req.Namespace, "name", req.Name)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -67,10 +93,10 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	zoneNames, err := r.getNginxRateLimitingZones(&pod) // TODO: check errors
+	zoneNames, err := r.getNginxRateLimitingZones(&pod)
 	if err != nil {
 		r.Log.Error(err, "Failed to get rate limiting zones", "namespace", req.Namespace, "name", req.Name)
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Second * 5}, err
 	}
 
 	if len(zoneNames) == 0 {

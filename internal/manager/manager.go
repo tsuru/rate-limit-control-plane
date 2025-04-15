@@ -29,13 +29,15 @@ func (gm *GoroutineManager) AddWorker(worker Worker) {
 	}
 }
 
-func (gm *GoroutineManager) RemoveWorker(id string) {
+func (gm *GoroutineManager) RemoveWorker(id string) bool {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 	if worker, exists := gm.workers[id]; exists {
 		worker.Stop()
 		delete(gm.workers, id)
+		return true
 	}
+	return false
 }
 
 func (gm *GoroutineManager) GetWorker(id string) (Worker, bool) {
