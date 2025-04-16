@@ -108,6 +108,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (Zone, error) {
 			log.Printf("Pod %s returned an error deconding entry: %v", w.PodIP, err)
 			return Zone{}, err
 		}
+		message.Last = convertToNoMonotonic(message.Last, rateLimitHeader)
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
 	return Zone{
@@ -115,4 +116,8 @@ func (w *RpaasPodWorker) getZoneData(zone string) (Zone, error) {
 		RateLimitHeader:  rateLimitHeader,
 		RateLimitEntries: rateLimitEntries,
 	}, nil
+}
+
+func convertToNoMonotonic(last int64, header RateLimitHeader) int64 {
+	return header.Now - (header.NowMonotonic - last)
 }
