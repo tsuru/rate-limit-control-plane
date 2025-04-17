@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/tsuru/rate-limit-control-plane/internal/manager"
+	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"github.com/vmihailenco/msgpack/v5"
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +35,7 @@ type RateLimitControllerReconcile struct {
 	Log              logr.Logger
 	ManagerGoroutine *manager.GoroutineManager
 	Namespace        string
-	Notify           chan manager.RpaasZoneData
+	Notify           chan ratelimit.RpaasZoneData
 }
 
 func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

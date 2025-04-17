@@ -6,18 +6,18 @@ import (
 	"log"
 	"sync"
 
-	"github.com/tsuru/rate-limit-control-plane/internal/manager"
+	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
 type ZoneDataRepository struct {
 	sync.Mutex
 	// -> RPAAS-NAME'{id: IP-ZONE, Last, Excess}'
 	Data                  map[string][]byte
-	readRpaasZoneDataChan chan manager.RpaasZoneData
+	readRpaasZoneDataChan chan ratelimit.RpaasZoneData
 }
 
-func NewRpaasZoneDataRepository() (*ZoneDataRepository, chan manager.RpaasZoneData) {
-	readRpaasZoneDataChan := make(chan manager.RpaasZoneData)
+func NewRpaasZoneDataRepository() (*ZoneDataRepository, chan ratelimit.RpaasZoneData) {
+	readRpaasZoneDataChan := make(chan ratelimit.RpaasZoneData)
 	return &ZoneDataRepository{
 		Data:                  make(map[string][]byte),
 		readRpaasZoneDataChan: readRpaasZoneDataChan,

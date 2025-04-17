@@ -5,6 +5,9 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/tsuru/rate-limit-control-plane/internal/aggregator"
+	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
 // Update RpaasInstanceSyncWorker to use GoroutineManager for managing pod workers
@@ -15,8 +18,9 @@ type RpaasInstanceSyncWorker struct {
 	RpaasInstanceSignals RpaasInstanceSignals
 	PodWorkerManager     *GoroutineManager
 	Ticker               *time.Ticker
-	zoneDataChan         chan Optional[Zone]
-	notify               chan RpaasZoneData
+	zoneDataChan         chan Optional[ratelimit.Zone]
+	notify               chan ratelimit.RpaasZoneData
+	fullZones            map[string]map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry
 }
 
 type RpaasInstanceSignals struct {
@@ -25,7 +29,7 @@ type RpaasInstanceSignals struct {
 	StopChan            chan struct{}
 }
 
-func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, notify chan RpaasZoneData) *RpaasInstanceSyncWorker {
+func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, notify chan ratelimit.RpaasZoneData) *RpaasInstanceSyncWorker {
 	signals := RpaasInstanceSignals{
 		StartRpaasPodWorker: make(chan [2]string),
 		StopRpaasPodWorker:  make(chan string),
@@ -39,8 +43,9 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, notify
 		RpaasInstanceSignals: signals,
 		PodWorkerManager:     NewGoroutineManager(),
 		Ticker:               ticker,
-		zoneDataChan:         make(chan Optional[Zone]),
+		zoneDataChan:         make(chan Optional[ratelimit.Zone]),
 		notify:               notify,
+		fullZones:            make(map[string]map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry),
 	}
 }
 
@@ -57,9 +62,9 @@ func (w *RpaasInstanceSyncWorker) Work() {
 }
 
 func (w *RpaasInstanceSyncWorker) processTick() {
-	rpaasZoneData := RpaasZoneData{
+	rpaasZoneData := ratelimit.RpaasZoneData{
 		RpaasName: w.RpaasInstanceName,
-		Data:      []Zone{},
+		Data:      []ratelimit.Zone{},
 	}
 	for _, zone := range w.Zones {
 		w.Lock()
@@ -79,7 +84,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		})
 
 		// Collect zone data from all pod workers
-		zoneData := []Zone{}
+		zoneData := []ratelimit.Zone{}
 		for i := 0; i < workerCount; i++ {
 			result := <-w.zoneDataChan
 			if result.Error != nil {
@@ -95,7 +100,8 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		}
 
 		// Aggregate zone data
-		aggregatedZone := w.aggregateZones(zoneData)
+		aggregatedZone, newFullZone := aggregator.AggregateZones(zoneData, w.fullZones[zone])
+		w.fullZones[zone] = newFullZone
 		w.Unlock()
 
 		rpaasZoneData.Data = append(rpaasZoneData.Data, aggregatedZone)
@@ -146,45 +152,6 @@ func (w *RpaasInstanceSyncWorker) RemovePodWorker(podName string) error {
 		return fmt.Errorf("pod worker not found: %s", podName)
 	}
 	return nil
-}
-
-// TODO: Manter os valores da ultima agregacao
-// TODO: Utilizar os valores da ultima agregacao para calcular o delta
-// TODO: Enviar o delta (calculado) para o pod worker
-// Formula: EXCESS' = EXCESS + SOMATORIO(EXCESS - Pod.Excess)
-// Se o EXCESS' for menor que 0, zerar o EXCESS' e manter o LAST
-// Pegar o maior valor do LAST entre os pods
-// TODO: Se o excess e o last forem iguais, ignorar o POD
-func (w *RpaasInstanceSyncWorker) aggregateZones(zonePerPod []Zone) Zone {
-	newFullZone := make(map[FullZoneKey]*RateLimitEntry)
-	for _, podZone := range zonePerPod {
-		for _, entity := range podZone.RateLimitEntries {
-			fmt.Println("aggregateZones: podZone.RateLimitHeader", podZone.RateLimitHeader)
-			hashID := FullZoneKey{
-				Zone: podZone.Name,
-				Key:  entity.Key.String(podZone.RateLimitHeader),
-			}
-			if entry, exists := newFullZone[hashID]; exists {
-				entry.Excess += entity.Excess
-				entry.Last = max(entry.Last, entity.Last)
-			} else {
-				newFullZone[hashID] = &RateLimitEntry{
-					Key:    entity.Key,
-					Last:   entity.Last,
-					Excess: entity.Excess,
-				}
-			}
-		}
-	}
-	zone := Zone{
-		Name:             zonePerPod[0].Name,
-		RateLimitHeader:  zonePerPod[0].RateLimitHeader,
-		RateLimitEntries: make([]RateLimitEntry, 0, len(newFullZone)),
-	}
-	for _, entry := range newFullZone {
-		zone.RateLimitEntries = append(zone.RateLimitEntries, *entry)
-	}
-	return zone
 }
 
 func max(a, b int64) int64 {
