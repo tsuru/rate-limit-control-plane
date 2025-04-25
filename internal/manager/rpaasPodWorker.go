@@ -18,12 +18,13 @@ const (
 )
 
 type RpaasPodWorker struct {
-	PodIP         string
-	PodName       string
-	zoneDataChan  chan Optional[ratelimit.Zone]
-	ReadZoneChan  chan string
-	WriteZoneChan chan ratelimit.Zone
-	StopChan      chan struct{}
+	PodIP             string
+	PodName           string
+	zoneDataChan      chan Optional[ratelimit.Zone]
+	ReadZoneChan      chan string
+	WriteZoneChan     chan ratelimit.Zone
+	StopChan          chan struct{}
+	RoundSmallestLast int64
 }
 
 func NewRpaasPodWorker(podIP, podName string, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
@@ -80,6 +81,11 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	if err != nil {
 		return ratelimit.Zone{}, err
 	}
+	if w.RoundSmallestLast != 0 {
+		query := req.URL.Query()
+		query.Set("last_greater_equal", fmt.Sprintf("%d", w.RoundSmallestLast))
+		req.URL.RawQuery = query.Encode()
+	}
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return ratelimit.Zone{}, err
@@ -108,6 +114,11 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			log.Printf("Pod %s returned an error deconding entry: %v", w.PodIP, err)
 			return ratelimit.Zone{}, err
 		}
+		if w.RoundSmallestLast == 0 {
+			w.RoundSmallestLast = message.Last
+		} else {
+			w.RoundSmallestLast = min(w.RoundSmallestLast, message.Last)
+		}
 		message.Last = toNonMonotonic(message.Last, rateLimitHeader)
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
@@ -120,4 +131,11 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 
 func toNonMonotonic(last int64, header ratelimit.RateLimitHeader) int64 {
 	return header.Now - (header.NowMonotonic - last)
+}
+
+func min(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
