@@ -1,9 +1,6 @@
 name: release-buildx
 
-on:
-  push:
-    tags:
-      - '*'
+on: [push, pull_request]
 
 jobs:
   buildx:
@@ -32,6 +29,7 @@ jobs:
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
+        if: github.event_name != 'pull_request'
         with:
           push: true
           tags: ${{ steps.smarttag.outputs.tag }}
