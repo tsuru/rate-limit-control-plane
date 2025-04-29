@@ -41,8 +41,16 @@ func main() {
 	repo, ch := repository.NewRpaasZoneDataRepository()
 	go repo.StartReader()
 
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		setupLog.Info("NAMESPACE not set, watching all namespaces")
+	} else {
+		setupLog.Info("Running in namespace", "namespace", namespace)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
+		Scheme:    scheme,
+		Namespace: namespace,
 		// MetricsBindAddress: *metricsAddr,
 		// Port: 9443,
 		// LeaderElection:     *enableLeaderElection,
