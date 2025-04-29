@@ -39,10 +39,6 @@ type RateLimitControllerReconcile struct {
 }
 
 func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if req.Namespace != "rpaasv2" {
-		return ctrl.Result{}, nil
-	}
-
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if client.IgnoreNotFound(err) == nil {
