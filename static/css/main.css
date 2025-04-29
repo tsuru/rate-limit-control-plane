@@ -1,0 +1,8 @@
+/* static/css/main.css */
+/* Additional custom styles can go here */
+.custom-hover:hover {
+    transform: translateY(-2px);
+    transition: transform 0.2s ease-in-out;
+}
+
+/* Currently we're primarily using Tailwind classes, but you can add custom styles here */
