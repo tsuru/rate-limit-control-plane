@@ -24,7 +24,7 @@ jobs:
         id: smarttag
         with:
           docker_image: tsuru/rate-limit-control-plane
-          default_branch: master
+          default_branch: main
           tag_with_sha: "true"
 
       - name: Build and push Docker image
