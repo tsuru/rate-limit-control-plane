@@ -1,6 +1,9 @@
-name: release-buildx-initial-0.0.1
+name: release-buildx
 
-on: push
+on:
+  push:
+    tags:
+      - '*'
 
 jobs:
   buildx:
@@ -8,10 +11,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: arm64,amd64
+
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v2
@@ -21,11 +21,20 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Build and push Docker image with tag 0.0.1
+      
+      - name: Create tag for Docker image
+        uses: Surgo/docker-smart-tag-action@v1
+        id: smarttag
+        with:
+          docker_image: tsuru/rate-limit-control-plane
+          default_branch: master
+          tag_with_sha: "true"
+
+      - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
           push: true
-          tags: tsuru/rate-limit-control-plane:0.0.1
+          tags: ${{ steps.smarttag.outputs.tag }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
