@@ -1,8 +1,7 @@
 ARG alpine_version=3.19
 ARG golang_version=1.22
-FROM golang:${golang_version}-alpine${alpine_version} as builder
+FROM golang:${golang_version}-alpine${alpine_version} AS builder
 ARG TARGETARCH
-ENV GOARCH=$TARGETARCH
 RUN apk update && apk add make
 
 WORKDIR /app
