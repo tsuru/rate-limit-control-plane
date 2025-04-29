@@ -1,5 +1,5 @@
 BINARY=rate-limit-control-plane
-IMAGE=ravi.localhost/rate-limit-control-plane-minikube:latest
+IMAGE=localhost/rate-limit-control-plane-minikube:latest
 TAG=latest
 .PHONY: run
 NAMESPACE=tsuru-system
