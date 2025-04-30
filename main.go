@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -47,6 +48,20 @@ func (o *configOpts) bindFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&o.leaderElection, "leader-elect", false, "Start a leader election client and gain leadership before executing the main loop. Enable this when running replicated components for high availability.")
 	fs.StringVar(&o.leaderElectionResourceName, "leader-elect-resource-name", "rate-limit-control-plane-lock", "The name of resource object that is used for locking during leader election.")
 
+}
+
+type InternalAPIServer struct {
+	repo         *repository.ZoneDataRepository
+	internalAddr string
+}
+
+func (s *InternalAPIServer) Start(ctx context.Context) error {
+	setupLog.Info("leadership acquired, starting internalapi", "addr", s.internalAddr)
+	go func() {
+		server.Notification(s.repo, s.internalAddr)
+	}()
+	<-ctx.Done()
+	return nil
 }
 
 func init() {
@@ -92,10 +107,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	go func() {
-		setupLog.Info("starting internalapi", "addr", opts.internalAPIAddr)
-		server.Notification(repo, opts.internalAPIAddr)
-	}()
+	internalAPIServer := &InternalAPIServer{
+		repo:         repo,
+		internalAddr: opts.internalAPIAddr,
+	}
+
+	err = mgr.Add(internalAPIServer)
+	if err != nil {
+		setupLog.Error(err, "unable to add internal API server")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
