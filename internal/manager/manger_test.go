@@ -5,7 +5,6 @@
 package manager
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,11 +15,9 @@ type work struct {
 }
 
 func (work) Start() {
-	fmt.Println("start")
 }
 
 func (work) Stop() {
-	fmt.Println("stop")
 }
 
 func (w work) GetID() string {
@@ -61,5 +58,4 @@ func TestManagerGoRoutines(t *testing.T) {
 		ids := manager.ListWorkerIDs()
 		assert.Equal("2", ids[0])
 	})
-
 }

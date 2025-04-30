@@ -10,6 +10,8 @@ import (
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
+const administrativePort = 8800
+
 // Update RpaasInstanceSyncWorker to use GoroutineManager for managing pod workers
 type RpaasInstanceSyncWorker struct {
 	sync.Mutex
@@ -143,7 +145,8 @@ func (w *RpaasInstanceSyncWorker) GetID() string {
 }
 
 func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
-	podWorker := NewRpaasPodWorker(podIP, podName, w.zoneDataChan)
+	podURL := fmt.Sprintf("http://%s:%d", podIP, administrativePort)
+	podWorker := NewRpaasPodWorker(podURL, podName, w.zoneDataChan)
 	w.PodWorkerManager.AddWorker(podWorker)
 }
 

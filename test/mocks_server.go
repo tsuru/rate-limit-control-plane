@@ -1,30 +1,14 @@
 package test
 
 import (
-	"fmt"
 	"net"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/vmihailenco/msgpack/v5"
 )
 
-func scanPort() (int, error) {
-	for port := 30000; port < 65535; port++ {
-		address := fmt.Sprintf("localhost:%d", port)
-		conn, err := net.DialTimeout("tcp", address, time.Duration(1)*time.Second)
-		if err != nil {
-			continue
-		}
-		conn.Close()
-		return port, nil
-	}
-	return 0, fmt.Errorf("no available port found")
-}
-
-func NewServerMock() {
-	repository := NewRepository()
-	app := fiber.New()
+func NewServerMock(listener net.Listener, repository *Repositories) {
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	app.Get("/rate-limit", func(c *fiber.Ctx) error {
 		var zones []string
 		for key := range repository.GetRateLimit() {
@@ -38,23 +22,32 @@ func NewServerMock() {
 		return c.Send(encodedData)
 	})
 
-	app.Get("/:zone", func(c *fiber.Ctx) error {
+	app.Get("/rate-limit/:zone", func(c *fiber.Ctx) error {
 		zones := repository.GetRateLimit()
 		zone := c.Params("zone")
 		data, ok := zones[zone]
 		if !ok {
 			return c.Status(fiber.StatusNotFound).SendString("Zone not found")
 		}
-		encodedData, err := msgpack.Marshal(data)
+		encodedData := make([]byte, 0)
+		encondedHeader, err := msgpack.Marshal(data.Header)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).SendString("Failed to encode data")
+			return c.Status(fiber.StatusInternalServerError).SendString("Failed to encode header")
+		}
+		encodedData = append(encodedData, encondedHeader...)
+		for _, body := range data.Body {
+			encodedBody, err := msgpack.Marshal(body)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).SendString("Failed to encode body")
+			}
+			encodedData = append(encodedData, encodedBody...)
 		}
 		c.Set("Content-Type", "application/msgpack")
 		return c.Send(encodedData)
 	})
 
-	app.Put("/:zone", func(c *fiber.Ctx) error {
-		var body []Repository
+	app.Put("/rate-limit/:zone", func(c *fiber.Ctx) error {
+		var body []*Body
 		if err := c.BodyParser(&body); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
 		}
@@ -62,11 +55,8 @@ func NewServerMock() {
 		repository.SetRateLimit(zone, body)
 		return c.SendStatus(fiber.StatusNoContent)
 	})
-	port, err := scanPort()
-	if err != nil {
-		panic(err)
-	}
-	if err := app.Listen(fmt.Sprintf(":%d", port)); err != nil {
+
+	if err := app.Listener(listener); err != nil {
 		panic(err)
 	}
 }

@@ -10,15 +10,13 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
-const administrativePort = 8800
-
 const (
 	binaryRemoteAddress = "$binary_remote_addr"
 	remoteAddress       = "$remote_addr"
 )
 
 type RpaasPodWorker struct {
-	PodIP             string
+	PodURL            string
 	PodName           string
 	zoneDataChan      chan Optional[ratelimit.Zone]
 	ReadZoneChan      chan string
@@ -27,9 +25,9 @@ type RpaasPodWorker struct {
 	RoundSmallestLast int64
 }
 
-func NewRpaasPodWorker(podIP, podName string, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
+func NewRpaasPodWorker(podURL, podName string, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
 	return &RpaasPodWorker{
-		PodIP:         podIP,
+		PodURL:        podURL,
 		PodName:       podName,
 		zoneDataChan:  zoneDataChan,
 		ReadZoneChan:  make(chan string),
@@ -76,7 +74,7 @@ func (w *RpaasPodWorker) cleanup() {
 }
 
 func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
-	endpoint := fmt.Sprintf("http://%s:%d/%s/%s", w.PodIP, administrativePort, "rate-limit", zone)
+	endpoint := fmt.Sprintf("%s/%s/%s", w.PodURL, "rate-limit", zone)
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return ratelimit.Zone{}, err
@@ -102,7 +100,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 				RateLimitEntries: rateLimitEntries,
 			}, nil
 		}
-		log.Printf("Pod %s returned an error deconding header: %v", w.PodIP, err)
+		log.Printf("Pod %s returned an error deconding header: %v", w.PodURL, err)
 		return ratelimit.Zone{}, err
 	}
 	for {
@@ -111,7 +109,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			if err == io.EOF {
 				break
 			}
-			log.Printf("Pod %s returned an error deconding entry: %v", w.PodIP, err)
+			log.Printf("Pod %s returned an error deconding entry: %v", w.PodURL, err)
 			return ratelimit.Zone{}, err
 		}
 		if w.RoundSmallestLast == 0 {

@@ -1,8 +1,13 @@
 package test
 
+import (
+	"sync"
+	"time"
+)
+
 type Repository struct {
-	Body
-	Header
+	Header Header
+	Body   []*Body
 }
 
 type Body struct {
@@ -12,24 +17,54 @@ type Body struct {
 }
 
 type Header struct {
+	Key          string
+	Now          int64
+	NowMonotonic int64
 }
 
 type Repositories struct {
-	Values map[string][]Repository
+	Mutex  sync.Mutex
+	Values map[string]*Repository
 }
 
 func NewRepository() *Repositories {
-	return &Repositories{}
+	now := time.Now().UTC().UnixMilli()
+	values := map[string]*Repository{
+		"one": {
+			Header: Header{
+				Key:          "$remote_addr",
+				Now:          now,
+				NowMonotonic: now,
+			},
+			Body: []*Body{},
+		},
+		"two": {
+			Header: Header{
+				Key:          "$remote_addr",
+				Now:          now,
+				NowMonotonic: now,
+			},
+			Body: []*Body{},
+		},
+	}
+	return &Repositories{
+		Values: values,
+	}
 }
 
-func (r *Repositories) GetRateLimit() map[string][]Repository {
+func (r *Repositories) GetRateLimit() map[string]*Repository {
+	r.Mutex.Lock()
+	defer r.Mutex.Unlock()
 	return r.Values
 }
 
-func (r *Repositories) SetRateLimit(zone string, values []Repository) {
+func (r *Repositories) SetRateLimit(zone string, values []*Body) {
+	r.Mutex.Lock()
+	defer r.Mutex.Unlock()
 	_, ok := r.Values[zone]
 	if ok {
-		r.Values[zone] = values
+		zone := r.Values[zone]
+		zone.Body = values
 		return
 	}
 }
