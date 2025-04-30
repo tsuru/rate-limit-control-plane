@@ -14,7 +14,7 @@ import (
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
 )
 
-func Notification(repo *repository.ZoneDataRepository) {
+func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 	// Initialize template engine
 	engine := html.New("./views", ".html")
 
@@ -84,8 +84,7 @@ func Notification(repo *repository.ZoneDataRepository) {
 	// Create necessary directories and files
 	setupStaticFiles()
 
-	log.Println("Server started at http://localhost:3000")
-	log.Fatal(app.Listen(":3000"))
+	log.Fatal(app.Listen(listenAddr))
 }
 
 func setupStaticFiles() {
