@@ -3,22 +3,26 @@ package repository
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"sync"
 
+	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
 type ZoneDataRepository struct {
 	sync.Mutex
-	// -> RPAAS-NAME'{id: IP-ZONE, Last, Excess}'
+	logger                *slog.Logger
 	Data                  map[string][]byte
 	readRpaasZoneDataChan chan ratelimit.RpaasZoneData
 }
 
 func NewRpaasZoneDataRepository() (*ZoneDataRepository, chan ratelimit.RpaasZoneData) {
 	readRpaasZoneDataChan := make(chan ratelimit.RpaasZoneData)
+	repositoryLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane-repository"}, os.Stdout)
 	return &ZoneDataRepository{
+		logger:                repositoryLogger,
 		Data:                  make(map[string][]byte),
 		readRpaasZoneDataChan: readRpaasZoneDataChan,
 	}, readRpaasZoneDataChan
@@ -30,7 +34,6 @@ func (z *ZoneDataRepository) StartReader() {
 		serverData := []Data{}
 		for _, zone := range rpaasZoneData.Data {
 			for _, entry := range zone.RateLimitEntries {
-				fmt.Println("StartReader: podZone.RateLimitHeader", zone.RateLimitHeader)
 				serverData = append(serverData, Data{
 					ID:     fmt.Sprintf("%s:%s", entry.Key.String(zone.RateLimitHeader), zone.Name),
 					Last:   entry.Last,
@@ -40,7 +43,7 @@ func (z *ZoneDataRepository) StartReader() {
 		}
 		dataBytes, err := json.MarshalIndent(serverData, "  ", "  ")
 		if err != nil {
-			log.Println("Error marshaling JSON:", err)
+			z.logger.Error("Error marshaling JSON", "error", err)
 			z.Unlock()
 			continue
 		}

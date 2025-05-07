@@ -3,7 +3,6 @@ package manager
 import (
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"time"
@@ -62,7 +61,7 @@ func (w *RpaasPodWorker) Work() {
 		case zoneName := <-w.ReadZoneChan:
 			go func() {
 				zoneData, err := w.getZoneData(zoneName)
-				w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: err}
+				w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("Error getting zone data from pod worker %s: %w", w.PodName, err)}
 			}()
 		case <-w.WriteZoneChan:
 			// TODO: Implement the logic to write zone data to the pod
@@ -111,7 +110,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 				RateLimitEntries: rateLimitEntries,
 			}, nil
 		}
-		log.Printf("Pod %s returned an error deconding header: %v", w.PodURL, err)
+		w.logger.Error("Error decoding header", "error", err)
 		return ratelimit.Zone{}, err
 	}
 	for {
@@ -120,7 +119,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			if err == io.EOF {
 				break
 			}
-			log.Printf("Pod %s returned an error deconding entry: %v", w.PodURL, err)
+			w.logger.Error("Error decoding entry", "error", err)
 			return ratelimit.Zone{}, err
 		}
 		if w.RoundSmallestLast == 0 {

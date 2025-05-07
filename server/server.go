@@ -2,19 +2,20 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
+	fiberLogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/template/html/v2"
+	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
 )
 
 func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
+	serverLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane-notification-server"}, os.Stdout)
 	// Initialize template engine
 	engine := html.New("./views", ".html")
 
@@ -23,7 +24,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 	})
 
 	app.Server().LogAllErrors = true
-	app.Use(logger.New(logger.Config{
+	app.Use(fiberLogger.New(fiberLogger.Config{
 		Format:     "[${time}] ${status} - ${latency} ${method} ${path}\n",
 		TimeFormat: time.RFC3339,
 		TimeZone:   "Local",
@@ -36,7 +37,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 		instances := repo.ListInstances()
 		instancesJSON, err := json.Marshal(instances)
 		if err != nil {
-			log.Println("Error marshaling JSON:", err)
+			serverLogger.Error("Error marshaling JSON", "error", err)
 			return c.Status(fiber.StatusInternalServerError).SendString("Error marshaling JSON")
 		}
 
@@ -47,7 +48,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 
 	app.Use("/ws/:rpaasName", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
-			log.Printf("WS upgrade requested for rpaasName: %s\n", c.Params("rpaasName"))
+			serverLogger.Info("WS upgrade requested for rpaasName", "rpaasName", c.Params("rpaasName"))
 			c.Locals("allowed", true)
 			return c.Next()
 		}
@@ -56,18 +57,16 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 
 	app.Get("/ws/:rpaasName", websocket.New(func(c *websocket.Conn) {
 		rpaasName := c.Params("rpaasName")
-		fmt.Printf("Connected to rpaasName: %s\n", rpaasName)
 		for {
 			data, ok := repo.GetRpaasZoneData(rpaasName)
-			fmt.Printf("Data for rpaasName: %s, ok: %v\n", rpaasName, ok)
 			if !ok {
 				if err := c.WriteMessage(websocket.TextMessage, []byte("Not Found")); err != nil {
-					log.Println("Error sending message:", err)
+					serverLogger.Error("Error sending message", "error", err)
 					return
 				}
 			}
 			if err := c.WriteMessage(websocket.TextMessage, data); err != nil {
-				log.Println("Error sending message:", err)
+				serverLogger.Error("Error sending message", "error", err)
 				return
 			}
 			time.Sleep(2 * time.Second)

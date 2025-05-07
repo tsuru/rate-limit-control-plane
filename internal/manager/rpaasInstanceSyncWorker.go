@@ -2,7 +2,6 @@ package manager
 
 import (
 	"fmt"
-	"log"
 	"log/slog"
 	"sync"
 	"time"
@@ -96,7 +95,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		for i := 0; i < workerCount; i++ {
 			result := <-w.zoneDataChan
 			if result.Error != nil {
-				log.Printf("Error getting zone data: %v", result.Error)
+				w.logger.Error("Error getting zone data", "error", result.Error)
 				continue
 			}
 			zoneData = append(zoneData, result.Value)
