@@ -8,11 +8,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/manager"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
@@ -102,7 +104,8 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 	}
 	worker, exists := r.ManagerGoroutine.GetWorker(rpaasInstanceName)
 	if !exists {
-		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, zoneNames, r.Notify)
+		instanceLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane"}, os.Stdout)
+		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, zoneNames, instanceLogger, r.Notify)
 		r.ManagerGoroutine.AddWorker(worker)
 	}
 	// convert worker to RpaasInstanceSyncWorker

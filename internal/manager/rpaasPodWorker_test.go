@@ -2,6 +2,7 @@ package manager
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"sort"
 	"testing"
@@ -13,7 +14,25 @@ import (
 	"github.com/tsuru/rate-limit-control-plane/test"
 )
 
+type loggerSpy struct {
+	LastMessage   string
+	NumberOfCalls int
+}
+
+func (l *loggerSpy) Write(p []byte) (int, error) {
+	l.NumberOfCalls++
+	l.LastMessage = string(p)
+	return len(p), nil
+}
+
+func (l *loggerSpy) Clean() {
+	l.NumberOfCalls = 0
+	l.LastMessage = ""
+}
+
 func TestRpaasPodWorkerAggregationWithoutPreviousData(t *testing.T) {
+	logSpy := new(loggerSpy)
+	logHandler := slog.NewTextHandler(logSpy, nil)
 	zone := "one"
 
 	listener1, err := net.Listen("tcp", ":0")
@@ -35,12 +54,12 @@ func TestRpaasPodWorkerAggregationWithoutPreviousData(t *testing.T) {
 	_, port1, err := net.SplitHostPort(listener1.Addr().String())
 	require.NoError(t, err)
 	url1 := fmt.Sprintf("http://localhost:%s", port1)
-	podWorker1 := NewRpaasPodWorker(url1, "test", zoneDataChan)
+	podWorker1 := NewRpaasPodWorker(url1, "test", slog.New(logHandler), zoneDataChan)
 
 	_, port2, err := net.SplitHostPort(listener2.Addr().String())
 	require.NoError(t, err)
 	url2 := fmt.Sprintf("http://localhost:%s", port2)
-	podWorker2 := NewRpaasPodWorker(url2, "test", zoneDataChan)
+	podWorker2 := NewRpaasPodWorker(url2, "test", slog.New(logHandler), zoneDataChan)
 
 	go podWorker1.Start()
 	defer podWorker1.Stop()
@@ -133,6 +152,8 @@ func TestRpaasPodWorkerAggregationWithoutPreviousData(t *testing.T) {
 }
 
 func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
+	logSpy := new(loggerSpy)
+	logHandler := slog.NewTextHandler(logSpy, nil)
 	zone := "one"
 
 	listener1, err := net.Listen("tcp", ":0")
@@ -154,12 +175,12 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 	_, port1, err := net.SplitHostPort(listener1.Addr().String())
 	require.NoError(t, err)
 	url1 := fmt.Sprintf("http://localhost:%s", port1)
-	podWorker1 := NewRpaasPodWorker(url1, "test", zoneDataChan)
+	podWorker1 := NewRpaasPodWorker(url1, "test", slog.New(logHandler), zoneDataChan)
 
 	_, port2, err := net.SplitHostPort(listener2.Addr().String())
 	require.NoError(t, err)
 	url2 := fmt.Sprintf("http://localhost:%s", port2)
-	podWorker2 := NewRpaasPodWorker(url2, "test", zoneDataChan)
+	podWorker2 := NewRpaasPodWorker(url2, "test", slog.New(logHandler), zoneDataChan)
 
 	go podWorker1.Start()
 	defer podWorker1.Stop()

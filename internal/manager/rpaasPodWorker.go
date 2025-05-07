@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
+	"time"
 
+	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -18,6 +21,7 @@ const (
 type RpaasPodWorker struct {
 	PodURL            string
 	PodName           string
+	logger            *slog.Logger
 	zoneDataChan      chan Optional[ratelimit.Zone]
 	ReadZoneChan      chan string
 	WriteZoneChan     chan ratelimit.Zone
@@ -25,11 +29,13 @@ type RpaasPodWorker struct {
 	RoundSmallestLast int64
 }
 
-func NewRpaasPodWorker(podURL, podName string, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
+func NewRpaasPodWorker(podURL, podName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
+	podLogger := logger.With("podName", podName, "podURL", podURL)
 	return &RpaasPodWorker{
 		PodURL:        podURL,
 		PodName:       podName,
 		zoneDataChan:  zoneDataChan,
+		logger:        podLogger,
 		ReadZoneChan:  make(chan string),
 		WriteZoneChan: make(chan ratelimit.Zone),
 		StopChan:      make(chan struct{}),
@@ -84,7 +90,12 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		query.Set("last_greater_equal", fmt.Sprintf("%d", w.RoundSmallestLast))
 		req.URL.RawQuery = query.Encode()
 	}
+	start := time.Now()
 	response, err := http.DefaultClient.Do(req)
+	reqDuration := time.Since(start)
+	if reqDuration > config.Spec.WarnZoneReadTime {
+		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
+	}
 	if err != nil {
 		return ratelimit.Zone{}, err
 	}
@@ -120,6 +131,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		message.Last = toNonMonotonic(message.Last, rateLimitHeader)
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
+	w.logger.Debug("Received rate limit entries", "zone", zone, "entries", len(rateLimitEntries))
 	return ratelimit.Zone{
 		Name:             zone,
 		RateLimitHeader:  rateLimitHeader,
