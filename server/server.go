@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/template/html/v2"
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
+	"github.com/tsuru/rate-limit-control-plane/internal/trace"
 )
 
 func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
@@ -33,6 +35,11 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 	app.Static("/static", "./static")
 
 	app.Get("/", func(c *fiber.Ctx) error {
+		shutdown := trace.InitTrace("http://jaeger-collector.observability.svc.cluster.local:14268/api/traces")
+		defer shutdown()
+		tracer := trace.TraceProvider.Tracer("data_test")
+		_, span := tracer.Start(context.Background(), "main")
+		defer span.End()
 		instances := repo.ListInstances()
 		instancesJSON, err := json.Marshal(instances)
 		if err != nil {
