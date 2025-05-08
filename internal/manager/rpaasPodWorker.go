@@ -61,7 +61,11 @@ func (w *RpaasPodWorker) Work() {
 		case zoneName := <-w.ReadZoneChan:
 			go func() {
 				zoneData, err := w.getZoneData(zoneName)
-				w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("Error getting zone data from pod worker %s: %w", w.PodName, err)}
+				if err != nil {
+					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("Error getting zone data from pod worker %s: %w", w.PodName, err)}
+				} else {
+					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
+				}
 			}()
 		case <-w.WriteZoneChan:
 			// TODO: Implement the logic to write zone data to the pod
