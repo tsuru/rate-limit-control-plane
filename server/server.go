@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/gofiber/template/html/v2"
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -31,10 +31,6 @@ func processEvent(start time.Time) {
 }
 
 func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(":3001", nil)
-	}()
 
 	serverLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane-notification-server"}, os.Stdout)
 	// Initialize template engine
@@ -53,6 +49,12 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 
 	// Setup static files
 	app.Static("/static", "./static")
+
+	app.Get("/metrics", func(c *fiber.Ctx) error {
+		handler := fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler())
+		handler(c.Context())
+		return nil
+	})
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		start := time.Now()
