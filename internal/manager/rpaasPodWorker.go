@@ -5,8 +5,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 	"github.com/vmihailenco/msgpack/v5"
@@ -18,26 +21,34 @@ const (
 )
 
 type RpaasPodWorker struct {
-	PodURL            string
-	PodName           string
-	logger            *slog.Logger
-	zoneDataChan      chan Optional[ratelimit.Zone]
-	ReadZoneChan      chan string
-	WriteZoneChan     chan ratelimit.Zone
-	StopChan          chan struct{}
-	RoundSmallestLast int64
+	PodURL               string
+	PodName              string
+	logger               *slog.Logger
+	zoneDataChan         chan Optional[ratelimit.Zone]
+	ReadZoneChan         chan string
+	WriteZoneChan        chan ratelimit.Zone
+	StopChan             chan struct{}
+	RoundSmallestLast    int64
+	readLatencyHistogram prometheus.Histogram
 }
 
 func NewRpaasPodWorker(podURL, podName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
 	podLogger := logger.With("podName", podName, "podURL", podURL)
+	readLatencyHistogram := promauto.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "nginx_read",
+		Name:      strings.ReplaceAll(podName, "-", "_"),
+		Help:      fmt.Sprintf("Histogram of request duration for RPaaS pod %s", podName),
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2, 15),
+	})
 	return &RpaasPodWorker{
-		PodURL:        podURL,
-		PodName:       podName,
-		zoneDataChan:  zoneDataChan,
-		logger:        podLogger,
-		ReadZoneChan:  make(chan string),
-		WriteZoneChan: make(chan ratelimit.Zone),
-		StopChan:      make(chan struct{}),
+		PodURL:               podURL,
+		PodName:              podName,
+		zoneDataChan:         zoneDataChan,
+		logger:               podLogger,
+		ReadZoneChan:         make(chan string),
+		WriteZoneChan:        make(chan ratelimit.Zone),
+		StopChan:             make(chan struct{}),
+		readLatencyHistogram: readLatencyHistogram,
 	}
 }
 
@@ -62,7 +73,7 @@ func (w *RpaasPodWorker) Work() {
 			go func() {
 				zoneData, err := w.getZoneData(zoneName)
 				if err != nil {
-					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("Error getting zone data from pod worker %s: %w", w.PodName, err)}
+					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.PodName, err)}
 				} else {
 					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
 				}
@@ -96,6 +107,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	start := time.Now()
 	response, err := http.DefaultClient.Do(req)
 	reqDuration := time.Since(start)
+	w.readLatencyHistogram.Observe(reqDuration.Seconds())
 	if reqDuration > config.Spec.WarnZoneReadTime {
 		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
 	}

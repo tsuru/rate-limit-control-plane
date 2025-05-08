@@ -10,6 +10,7 @@ import (
 	"os"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	nginxOperatorv1alpha1 "github.com/tsuru/nginx-operator/api/v1alpha1"
 	"github.com/tsuru/rate-limit-control-plane/controllers"
 	"github.com/tsuru/rate-limit-control-plane/internal/manager"
@@ -47,7 +48,6 @@ func (o *configOpts) bindFlags(fs *flag.FlagSet) {
 
 	fs.BoolVar(&o.leaderElection, "leader-elect", false, "Start a leader election client and gain leadership before executing the main loop. Enable this when running replicated components for high availability.")
 	fs.StringVar(&o.leaderElectionResourceName, "leader-elect-resource-name", "rate-limit-control-plane-lock", "The name of resource object that is used for locking during leader election.")
-
 }
 
 type InternalAPIServer struct {
@@ -106,6 +106,8 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	mgr.AddMetricsExtraHandler("/pod-worker-read-latency", promhttp.Handler())
 
 	internalAPIServer := &InternalAPIServer{
 		repo:         repo,

@@ -12,26 +12,9 @@ import (
 	"github.com/gofiber/template/html/v2"
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var eventLatency = promauto.NewHistogram(prometheus.HistogramOpts{
-	Name:    "event_latency_seconds",
-	Help:    "Latency of events in seconds",
-	Buckets: prometheus.ExponentialBuckets(0.001, 2, 15),
-})
-
-func processEvent(start time.Time) {
-	duration := time.Since(start).Seconds()
-	eventLatency.Observe(duration)
-}
-
 func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
-
 	serverLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane-notification-server"}, os.Stdout)
 	// Initialize template engine
 	engine := html.New("./views", ".html")
@@ -50,15 +33,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 	// Setup static files
 	app.Static("/static", "./static")
 
-	app.Get("/metrics", func(c *fiber.Ctx) error {
-		handler := fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler())
-		handler(c.Context())
-		return nil
-	})
-
 	app.Get("/", func(c *fiber.Ctx) error {
-		start := time.Now()
-		defer processEvent(start)
 		instances := repo.ListInstances()
 		instancesJSON, err := json.Marshal(instances)
 		if err != nil {
