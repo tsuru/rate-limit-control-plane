@@ -62,7 +62,7 @@ func (w *RpaasPodWorker) Work() {
 			go func() {
 				zoneData, err := w.getZoneData(zoneName)
 				if err != nil {
-					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("Error getting zone data from pod worker %s: %w", w.PodName, err)}
+					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.PodName, err)}
 				} else {
 					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
 				}
@@ -96,6 +96,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	start := time.Now()
 	response, err := http.DefaultClient.Do(req)
 	reqDuration := time.Since(start)
+	readLatencyHistogramVec.WithLabelValues(w.PodName, zone).Observe(reqDuration.Seconds())
 	if reqDuration > config.Spec.WarnZoneReadTime {
 		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
 	}

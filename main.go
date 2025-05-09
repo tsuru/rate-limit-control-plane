@@ -47,7 +47,6 @@ func (o *configOpts) bindFlags(fs *flag.FlagSet) {
 
 	fs.BoolVar(&o.leaderElection, "leader-elect", false, "Start a leader election client and gain leadership before executing the main loop. Enable this when running replicated components for high availability.")
 	fs.StringVar(&o.leaderElectionResourceName, "leader-elect-resource-name", "rate-limit-control-plane-lock", "The name of resource object that is used for locking during leader election.")
-
 }
 
 type InternalAPIServer struct {
