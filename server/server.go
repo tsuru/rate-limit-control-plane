@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	fiberLogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/template/html/v2"
+
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
 )

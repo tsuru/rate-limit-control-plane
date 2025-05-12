@@ -14,9 +14,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/tsuru/rate-limit-control-plane/internal/logger"
-	"github.com/tsuru/rate-limit-control-plane/internal/manager"
-	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"github.com/vmihailenco/msgpack/v5"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +22,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	"github.com/tsuru/rate-limit-control-plane/internal/logger"
+	"github.com/tsuru/rate-limit-control-plane/internal/manager"
+	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
 const (

@@ -170,10 +170,3 @@ func (w *RpaasInstanceSyncWorker) RemovePodWorker(podName string) error {
 	}
 	return nil
 }
-
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}

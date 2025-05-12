@@ -11,10 +11,6 @@ import (
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	nginxOperatorv1alpha1 "github.com/tsuru/nginx-operator/api/v1alpha1"
-	"github.com/tsuru/rate-limit-control-plane/controllers"
-	"github.com/tsuru/rate-limit-control-plane/internal/manager"
-	"github.com/tsuru/rate-limit-control-plane/internal/repository"
-	"github.com/tsuru/rate-limit-control-plane/server"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"k8s.io/api/node/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +19,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/tsuru/rate-limit-control-plane/controllers"
+	"github.com/tsuru/rate-limit-control-plane/internal/manager"
+	"github.com/tsuru/rate-limit-control-plane/internal/repository"
+	"github.com/tsuru/rate-limit-control-plane/server"
 )
 
 var (

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 

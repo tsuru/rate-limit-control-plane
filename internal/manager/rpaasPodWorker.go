@@ -7,14 +7,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/vmihailenco/msgpack/v5"
+
 	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
-	"github.com/vmihailenco/msgpack/v5"
-)
-
-const (
-	binaryRemoteAddress = "$binary_remote_addr"
-	remoteAddress       = "$remote_addr"
 )
 
 type RpaasPodWorker struct {

@@ -5,6 +5,40 @@ TAG=latest
 NAMESPACE=tsuru-system
 SERVICE_ACCOUNT=rpaas-operator
 
+# Run tests
+.PHONY: test
+test: fmt vet lint
+	go test -race -coverprofile cover.out ./...
+
+.PHONY: lint
+lint: golangci-lint
+	$(GOLANGCI_LINT) run ./...
+
+# Run go fmt against code
+.PHONY: fmt
+fmt:
+	go fmt ./...
+
+# Run go vet against code
+.PHONY: vet
+vet:
+	go vet ./...
+
+# find or download golangci-lint
+# download golangci-lint if necessary
+.PHONY: golangci-lint
+golangci-lint:
+ifeq (, $(shell which golangci-lint))
+	@{ \
+	set -e ;\
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v2.1.6 -- -b $(GOBIN) ;\
+	}
+GOLANGCI_LINT=$(GOBIN)/golangci-lint
+else
+GOLANGCI_LINT=$(shell which golangci-lint)
+endif
+
+
 run:
 	go run ./main.go --enable-leader-election=false
 

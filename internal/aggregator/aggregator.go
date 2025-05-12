@@ -4,13 +4,6 @@ import (
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
-// TODO: Manter os valores da ultima agregacao
-// TODO: Utilizar os valores da ultima agregacao para calcular o delta
-// TODO: Enviar o delta (calculado) para o pod worker
-// Formula: EXCESS' = EXCESS + SOMATORIO(EXCESS - Pod.Excess)
-// Se o EXCESS' for menor que 0, zerar o EXCESS' e manter o LAST
-// Pegar o maior valor do LAST entre os pods
-// TODO: Se o excess e o last forem iguais, ignorar o POD
 func AggregateZones(zonePerPod []ratelimit.Zone, fullZone map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry) (ratelimit.Zone, map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry) {
 	// logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 	// 	AddSource: true,
