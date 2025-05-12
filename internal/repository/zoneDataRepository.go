@@ -43,10 +43,10 @@ func (z *ZoneDataRepository) StartReader() {
 			}
 		}
 		slices.SortFunc(serverData, func(a, b Data) int {
-			if a.Excess > b.Excess {
+			if a.Excess < b.Excess {
 				return 1
 			}
-			if a.Excess < b.Excess {
+			if a.Excess > b.Excess {
 				return -1
 			}
 			return 0
