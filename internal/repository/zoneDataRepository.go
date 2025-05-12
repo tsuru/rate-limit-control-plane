@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
@@ -40,6 +41,18 @@ func (z *ZoneDataRepository) StartReader() {
 					Excess: entry.Excess,
 				})
 			}
+		}
+		slices.SortFunc(serverData, func(a, b Data) int {
+			if a.Excess > b.Excess {
+				return 1
+			}
+			if a.Excess < b.Excess {
+				return -1
+			}
+			return 0
+		})
+		if len(serverData) > 10 {
+			serverData = serverData[:10]
 		}
 		dataBytes, err := json.MarshalIndent(serverData, "  ", "  ")
 		if err != nil {
