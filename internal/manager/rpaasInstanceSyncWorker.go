@@ -160,7 +160,7 @@ func (w *RpaasInstanceSyncWorker) GetID() string {
 
 func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
 	podURL := fmt.Sprintf("http://%s:%d", podIP, administrativePort)
-	podWorker := NewRpaasPodWorker(podURL, podName, w.logger, w.zoneDataChan)
+	podWorker := NewRpaasPodWorker(podURL, podName, w.RpaasInstanceName, w.logger, w.zoneDataChan)
 	w.PodWorkerManager.AddWorker(podWorker)
 }
 

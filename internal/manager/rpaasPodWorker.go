@@ -15,6 +15,7 @@ import (
 
 type RpaasPodWorker struct {
 	PodURL            string
+	RpaasInstanceName string
 	PodName           string
 	logger            *slog.Logger
 	zoneDataChan      chan Optional[ratelimit.Zone]
@@ -24,16 +25,17 @@ type RpaasPodWorker struct {
 	RoundSmallestLast int64
 }
 
-func NewRpaasPodWorker(podURL, podName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
+func NewRpaasPodWorker(podURL, podName, rpaasInstanceName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
 	podLogger := logger.With("podName", podName, "podURL", podURL)
 	return &RpaasPodWorker{
-		PodURL:        podURL,
-		PodName:       podName,
-		zoneDataChan:  zoneDataChan,
-		logger:        podLogger,
-		ReadZoneChan:  make(chan string),
-		WriteZoneChan: make(chan ratelimit.Zone),
-		StopChan:      make(chan struct{}),
+		PodURL:            podURL,
+		PodName:           podName,
+		RpaasInstanceName: rpaasInstanceName,
+		zoneDataChan:      zoneDataChan,
+		logger:            podLogger,
+		ReadZoneChan:      make(chan string),
+		WriteZoneChan:     make(chan ratelimit.Zone),
+		StopChan:          make(chan struct{}),
 	}
 }
 
@@ -92,7 +94,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	start := time.Now()
 	response, err := http.DefaultClient.Do(req)
 	reqDuration := time.Since(start)
-	readLatencyHistogramVec.WithLabelValues(w.PodName, zone).Observe(reqDuration.Seconds())
+	readLatencyHistogramVec.WithLabelValues(w.PodName, w.RpaasInstanceName, zone).Observe(reqDuration.Seconds())
 	if reqDuration > config.Spec.WarnZoneReadTime {
 		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
 	}
