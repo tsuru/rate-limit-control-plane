@@ -77,6 +77,11 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	rpaasServiceName, exists := pod.Labels["rpaas.extensions.tsuru.io/service-name"]
+	if !exists {
+		return ctrl.Result{}, nil
+	}
+
 	if pod.Status.PodIP == "" {
 		r.Log.Info("ip not found", "namespace", req.Namespace, "name", req.Name)
 		return ctrl.Result{RequeueAfter: time.Second * 1}, nil
@@ -106,7 +111,7 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 	worker, exists := r.ManagerGoroutine.GetWorker(rpaasInstanceName)
 	if !exists {
 		instanceLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane"}, os.Stdout)
-		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, zoneNames, instanceLogger, r.Notify)
+		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName, zoneNames, instanceLogger, r.Notify)
 		r.ManagerGoroutine.AddWorker(worker)
 	}
 	// convert worker to RpaasInstanceSyncWorker

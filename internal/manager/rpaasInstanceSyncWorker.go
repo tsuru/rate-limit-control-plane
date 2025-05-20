@@ -17,6 +17,7 @@ const administrativePort = 8800
 type RpaasInstanceSyncWorker struct {
 	sync.Mutex
 	RpaasInstanceName    string
+	RpaasServiceName     string
 	Zones                []string
 	RpaasInstanceSignals RpaasInstanceSignals
 	PodWorkerManager     *GoroutineManager
@@ -33,7 +34,7 @@ type RpaasInstanceSignals struct {
 	StopChan            chan struct{}
 }
 
-func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, logger *slog.Logger, notify chan ratelimit.RpaasZoneData) *RpaasInstanceSyncWorker {
+func NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName string, zones []string, logger *slog.Logger, notify chan ratelimit.RpaasZoneData) *RpaasInstanceSyncWorker {
 	signals := RpaasInstanceSignals{
 		StartRpaasPodWorker: make(chan [2]string),
 		StopRpaasPodWorker:  make(chan string),
@@ -44,6 +45,7 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName string, zones []string, logger
 
 	return &RpaasInstanceSyncWorker{
 		RpaasInstanceName:    rpaasInstanceName,
+		RpaasServiceName:     rpaasServiceName,
 		Zones:                zones,
 		RpaasInstanceSignals: signals,
 		PodWorkerManager:     NewGoroutineManager(),
@@ -114,6 +116,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		operationStart = time.Now()
 		aggregatedZone, newFullZone := aggregator.AggregateZones(zoneData, w.fullZones[zone])
 		operationDuration = time.Since(operationStart)
+		aggregateLatencyHistogramVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone).Observe(operationDuration.Seconds())
 		if operationDuration > config.Spec.WarnZoneAggregationTime {
 			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
 		}
@@ -160,7 +163,7 @@ func (w *RpaasInstanceSyncWorker) GetID() string {
 
 func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
 	podURL := fmt.Sprintf("http://%s:%d", podIP, administrativePort)
-	podWorker := NewRpaasPodWorker(podURL, podName, w.RpaasInstanceName, w.logger, w.zoneDataChan)
+	podWorker := NewRpaasPodWorker(podURL, podName, w.RpaasInstanceName, w.RpaasServiceName, w.logger, w.zoneDataChan)
 	w.PodWorkerManager.AddWorker(podWorker)
 }
 
