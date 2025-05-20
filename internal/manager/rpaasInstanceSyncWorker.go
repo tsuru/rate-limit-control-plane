@@ -114,6 +114,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		operationStart = time.Now()
 		aggregatedZone, newFullZone := aggregator.AggregateZones(zoneData, w.fullZones[zone])
 		operationDuration = time.Since(operationStart)
+		aggregateLatencyHistogramVec.WithLabelValues(w.RpaasInstanceName, zone).Observe(operationDuration.Seconds())
 		if operationDuration > config.Spec.WarnZoneAggregationTime {
 			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
 		}
