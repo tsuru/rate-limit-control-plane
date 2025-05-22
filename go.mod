@@ -5,7 +5,7 @@ go 1.22.10
 require (
 	github.com/go-logr/logr v1.2.3
 	github.com/gofiber/contrib/websocket v1.3.4
-	github.com/gofiber/fiber/v2 v2.52.6
+	github.com/gofiber/fiber/v2 v2.52.7
 	github.com/gofiber/template/html/v2 v2.1.3
 	github.com/kedacore/keda/v2 v2.10.1
 	github.com/kelseyhightower/envconfig v1.4.0
