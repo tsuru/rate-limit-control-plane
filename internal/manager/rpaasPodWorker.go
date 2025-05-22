@@ -95,13 +95,13 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	}
 	start := time.Now()
 	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.PodURL, w.PodName, err)
+	}
 	reqDuration := time.Since(start)
 	readLatencyHistogramVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone).Observe(reqDuration.Seconds())
 	if reqDuration > config.Spec.WarnZoneReadTime {
 		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
-	}
-	if err != nil {
-		return ratelimit.Zone{}, err
 	}
 	defer response.Body.Close()
 	decoder := msgpack.NewDecoder(response.Body)
