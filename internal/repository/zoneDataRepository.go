@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
@@ -51,8 +52,8 @@ func (z *ZoneDataRepository) StartReader() {
 			}
 			return 0
 		})
-		if len(serverData) > 100 {
-			serverData = serverData[:100]
+		if len(serverData) > config.Spec.MaxTopOffensorsReport {
+			serverData = serverData[:config.Spec.MaxTopOffensorsReport]
 		}
 		dataBytes, err := json.MarshalIndent(serverData, "  ", "  ")
 		if err != nil {

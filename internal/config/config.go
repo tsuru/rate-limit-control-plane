@@ -18,6 +18,7 @@ type Specification struct {
 	WarnZoneReadTime                 time.Duration `default:"50ms" envconfig:"warn_zone_read_time"`
 	WarnZoneAggregationTime          time.Duration `default:"50ms" envconfig:"warn_zone_aggregation_time"`
 	FeatureFlagPersistAggregatedData bool          `default:"false" envconfig:"feature_flag_persist_aggregated_data"`
+	MaxTopOffensorsReport            int           `default:"100" envconfig:"max_top_offensors_report"`
 }
 
 var Spec Specification
