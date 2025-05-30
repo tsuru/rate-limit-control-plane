@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -46,7 +47,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 		}
 		if instanceName == "" {
 			serverLogger.Error("Instance not found", "instance", rpaasName)
-			return c.Status(fiber.StatusNotFound).SendString("Instance not found")
+			return c.Status(fiber.StatusNotFound).SendString(fmt.Sprintf("Instance not found, instances available %v", instances))
 		}
 		data, ok := repo.GetRpaasZoneData(instanceName)
 		if !ok {
