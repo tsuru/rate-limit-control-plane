@@ -36,7 +36,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 	app.Static("/static", "./static")
 
 	app.Get("/rpaas/:rpaasName", func(c *fiber.Ctx) error {
-		rpaasName := c.Params("instance")
+		rpaasName := c.Params("rpaasName")
 		instances := repo.ListInstances()
 		var instanceName string
 		for _, instance := range instances {
