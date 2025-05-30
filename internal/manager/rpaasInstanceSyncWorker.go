@@ -120,17 +120,21 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		if operationDuration > config.Spec.WarnZoneAggregationTime {
 			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
 		}
-		w.fullZones[zone] = newFullZone
+		if config.Spec.FeatureFlagPersistAggregatedData {
+			w.fullZones[zone] = newFullZone
+		}
 		w.Unlock()
 
 		rpaasZoneData.Data = append(rpaasZoneData.Data, aggregatedZone)
 
-		// Write aggregated data back to pod workers
-		w.PodWorkerManager.ForEachWorker(func(worker Worker) {
-			if podWorker, ok := worker.(*RpaasPodWorker); ok {
-				podWorker.WriteZoneChan <- aggregatedZone
-			}
-		})
+		if config.Spec.FeatureFlagPersistAggregatedData {
+			// Write aggregated data back to pod workers
+			w.PodWorkerManager.ForEachWorker(func(worker Worker) {
+				if podWorker, ok := worker.(*RpaasPodWorker); ok {
+					podWorker.WriteZoneChan <- aggregatedZone
+				}
+			})
+		}
 	}
 	w.notify <- rpaasZoneData
 }

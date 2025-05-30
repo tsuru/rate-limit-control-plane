@@ -51,8 +51,8 @@ func (z *ZoneDataRepository) StartReader() {
 			}
 			return 0
 		})
-		if len(serverData) > 10 {
-			serverData = serverData[:10]
+		if len(serverData) > 100 {
+			serverData = serverData[:100]
 		}
 		dataBytes, err := json.MarshalIndent(serverData, "  ", "  ")
 		if err != nil {
