@@ -34,6 +34,29 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 	// Setup static files
 	app.Static("/static", "./static")
 
+	app.Get("/rpaas/:rpaasName", func(c *fiber.Ctx) error {
+		rpaasName := c.Params("instance")
+		instances := repo.ListInstances()
+		var instanceName string
+		for _, instance := range instances {
+			if instance == rpaasName {
+				serverLogger.Info("Instance found", "instance", rpaasName)
+				instanceName = instance
+			}
+		}
+		if instanceName == "" {
+			serverLogger.Error("Instance not found", "instance", rpaasName)
+			return c.Status(fiber.StatusNotFound).SendString("Instance not found")
+		}
+		data, ok := repo.GetRpaasZoneData(instanceName)
+		if !ok {
+			serverLogger.Error("Instance not found", "instance", instanceName)
+			return c.Status(fiber.StatusNotFound).SendString("Instance not found")
+		}
+		serverLogger.Info("Serving instance data", "instance", instanceName)
+		return c.Send(data)
+	})
+
 	app.Get("/", func(c *fiber.Ctx) error {
 		instances := repo.ListInstances()
 		instancesJSON, err := json.Marshal(instances)
