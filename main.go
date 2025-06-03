@@ -83,7 +83,6 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
 
 	repo, ch := repository.NewRpaasZoneDataRepository()
-	go repo.StartReader()
 
 	namespace := os.Getenv("NAMESPACE")
 	if namespace == "" {
