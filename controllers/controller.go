@@ -45,7 +45,7 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 	var pod corev1.Pod
 	if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			r.Log.Info("pod not found", "namespace", req.Namespace, "name", req.Name)
+			r.Log.V(1).Info("pod not found", "namespace", req.Namespace, "name", req.Name)
 			parts := strings.Split(req.Name, "-")
 			if len(parts) < 3 {
 				r.Log.Info("pod name does not match expected pattern", "name", req.Name)
