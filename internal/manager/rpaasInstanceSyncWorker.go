@@ -40,7 +40,7 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName string, zone
 		StopRpaasPodWorker:  make(chan string),
 		StopChan:            make(chan struct{}),
 	}
-	ticker := time.NewTicker(config.Spec.ControllerMinutesInternval)
+	ticker := time.NewTicker(config.Spec.ControllerMinutesInternal)
 	instanceLogger := logger.With("instanceName", rpaasInstanceName)
 
 	return &RpaasInstanceSyncWorker{

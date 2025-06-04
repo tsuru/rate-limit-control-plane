@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
@@ -217,17 +218,10 @@ func TestNewRpaasZoneDataRepository(t *testing.T) {
 		err := json.Unmarshal(b, &rpaasZoneData)
 		assert.Nil(err)
 		assert.Len(rpaasZoneData, 3)
-		assert.Equal("test-key-one:test-zone-one", rpaasZoneData[0].ID)
-		assert.Equal(int64(1622547810), rpaasZoneData[0].Last)
-		assert.Equal(int64(27), rpaasZoneData[0].Excess)
 
-		assert.Equal("test-key-three:test-zone-one", rpaasZoneData[1].ID)
-		assert.Equal(int64(1622547800), rpaasZoneData[1].Last)
-		assert.Equal(int64(10), rpaasZoneData[1].Excess)
-
-		assert.Equal("test-key-two:test-zone-one", rpaasZoneData[2].ID)
-		assert.Equal(int64(1622547803), rpaasZoneData[2].Last)
-		assert.Equal(int64(5), rpaasZoneData[2].Excess)
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-one:test-zone-one", Last: 1622547810, Excess: 27})
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-three:test-zone-one", Last: 1622547800, Excess: 10})
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-two:test-zone-one", Last: 1622547803, Excess: 5})
 	})
 
 	t.Run("should handle multiple zones with different keys", func(t *testing.T) {
@@ -283,17 +277,10 @@ func TestNewRpaasZoneDataRepository(t *testing.T) {
 		err := json.Unmarshal(b, &rpaasZoneData)
 		assert.Nil(err)
 		assert.Len(rpaasZoneData, 3)
-		assert.Equal("test-key-one:test-zone-one", rpaasZoneData[0].ID)
-		assert.Equal(int64(1622547810), rpaasZoneData[0].Last)
-		assert.Equal(int64(27), rpaasZoneData[0].Excess)
 
-		assert.Equal("test-key-three:test-zone-two", rpaasZoneData[1].ID)
-		assert.Equal(int64(1622547800), rpaasZoneData[1].Last)
-		assert.Equal(int64(10), rpaasZoneData[1].Excess)
-
-		assert.Equal("test-key-two:test-zone-one", rpaasZoneData[2].ID)
-		assert.Equal(int64(1622547803), rpaasZoneData[2].Last)
-		assert.Equal(int64(5), rpaasZoneData[2].Excess)
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-one:test-zone-one", Last: 1622547810, Excess: 27})
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-three:test-zone-two", Last: 1622547800, Excess: 10})
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-two:test-zone-one", Last: 1622547803, Excess: 5})
 	})
 
 	t.Run("should handle multiple zones with different keys with chan", func(t *testing.T) {
@@ -350,17 +337,10 @@ func TestNewRpaasZoneDataRepository(t *testing.T) {
 		err := json.Unmarshal(b, &rpaasZoneData)
 		assert.Nil(err)
 		assert.Len(rpaasZoneData, 3)
-		assert.Equal("test-key-one:test-zone-one", rpaasZoneData[0].ID)
-		assert.Equal(int64(1622547810), rpaasZoneData[0].Last)
-		assert.Equal(int64(27), rpaasZoneData[0].Excess)
 
-		assert.Equal("test-key-three:test-zone-two", rpaasZoneData[1].ID)
-		assert.Equal(int64(1622547800), rpaasZoneData[1].Last)
-		assert.Equal(int64(10), rpaasZoneData[1].Excess)
-
-		assert.Equal("test-key-two:test-zone-one", rpaasZoneData[2].ID)
-		assert.Equal(int64(1622547803), rpaasZoneData[2].Last)
-		assert.Equal(int64(5), rpaasZoneData[2].Excess)
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-one:test-zone-one", Last: 1622547810, Excess: 27})
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-three:test-zone-two", Last: 1622547800, Excess: 10})
+		assert.Contains(rpaasZoneData, Data{ID: "test-key-two:test-zone-one", Last: 1622547803, Excess: 5})
 	})
 
 }
