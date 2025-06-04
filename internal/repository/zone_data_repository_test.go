@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
