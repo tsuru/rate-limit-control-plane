@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"slices"
 	"sync"
 
 	"github.com/tsuru/rate-limit-control-plane/internal/config"
@@ -51,18 +50,7 @@ func (z *ZoneDataRepository) insert(rpaasZoneData ratelimit.RpaasZoneData) {
 			})
 		}
 	}
-	slices.SortFunc(serverData, func(a, b Data) int {
-		if a.Excess < b.Excess {
-			return 1
-		}
-		if a.Excess > b.Excess {
-			return -1
-		}
-		return 0
-	})
-	if len(serverData) > config.Spec.MaxTopOffensorsReport {
-		serverData = serverData[:config.Spec.MaxTopOffensorsReport]
-	}
+	serverData = TopKByExcess(serverData, config.Spec.MaxTopOffendersReport)
 	dataBytes, err := json.MarshalIndent(serverData, "  ", "  ")
 	if err != nil {
 		z.logger.Error("Error marshaling JSON", "error", err)
