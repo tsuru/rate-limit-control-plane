@@ -12,21 +12,20 @@ import (
 )
 
 func TestMinHeap(t *testing.T) {
-
 	t.Run("TopKByExcess", func(t *testing.T) {
 		assert := assert.New(t)
 
 		data := []Data{
-			{ID: "1", Last: 1622547800, Excess: 10},
-			{ID: "2", Last: 1622547801, Excess: 20},
-			{ID: "3", Last: 1622547802, Excess: 5},
-			{ID: "4", Last: 1622547803, Excess: 15},
+			{Key: "1", Zone: "one", Last: 1622547800, Excess: 10},
+			{Key: "2", Zone: "one", Last: 1622547801, Excess: 20},
+			{Key: "3", Zone: "one", Last: 1622547802, Excess: 5},
+			{Key: "4", Zone: "one", Last: 1622547803, Excess: 15},
 		}
 		topK := TopKByExcess(data, 2)
 		fmt.Println("Top K by Excess:", topK)
 		assert.Len(topK, 2)
-		assert.Contains(topK, Data{ID: "2", Last: 1622547801, Excess: 20})
-		assert.Contains(topK, Data{ID: "4", Last: 1622547803, Excess: 15})
+		assert.Contains(topK, Data{Key: "2", Zone: "one", Last: 1622547801, Excess: 20})
+		assert.Contains(topK, Data{Key: "4", Zone: "one", Last: 1622547803, Excess: 15})
 	})
 
 	t.Run("TopKByExcess with less data than k", func(t *testing.T) {
@@ -35,17 +34,18 @@ func TestMinHeap(t *testing.T) {
 		now := time.Now().Unix()
 		for i := 0; i < len(data); i++ {
 			data[i] = Data{
-				ID:     strconv.Itoa(i + 1),
+				Key:    strconv.Itoa(i + 1),
+				Zone:   "one",
 				Last:   rand.Int63n(now),
 				Excess: rand.Int63n(100),
 			}
 		}
-		data[87] = Data{ID: "_87", Last: now, Excess: 110}
-		data[780_090] = Data{ID: "_123", Last: now, Excess: 120}
+		data[87] = Data{Key: "_87", Zone: "one", Last: now, Excess: 110}
+		data[780_090] = Data{Key: "_123", Zone: "one", Last: now, Excess: 120}
 		topK := TopKByExcess(data, 2)
 		assert.Len(topK, 2)
-		assert.Contains(topK, Data{ID: "_123", Last: now, Excess: 120})
-		assert.Contains(topK, Data{ID: "_87", Last: now, Excess: 110})
+		assert.Contains(topK, Data{Key: "_123", Zone: "one", Last: now, Excess: 120})
+		assert.Contains(topK, Data{Key: "_87", Zone: "one", Last: now, Excess: 110})
 	})
 }
 
@@ -54,7 +54,7 @@ func BenchmarkSort(b *testing.B) {
 	now := time.Now().Unix()
 	for i := 0; i < len(data); i++ {
 		data[i] = Data{
-			ID:     strconv.Itoa(i + 1),
+			Key:    strconv.Itoa(i + 1),
 			Last:   rand.Int63n(now),
 			Excess: rand.Int63n(100),
 		}

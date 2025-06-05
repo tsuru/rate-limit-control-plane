@@ -2,7 +2,6 @@ package repository
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -44,7 +43,8 @@ func (z *ZoneDataRepository) insert(rpaasZoneData ratelimit.RpaasZoneData) {
 	for _, zone := range rpaasZoneData.Data {
 		for _, entry := range zone.RateLimitEntries {
 			serverData = append(serverData, Data{
-				ID:     fmt.Sprintf("%s:%s", entry.Key.String(zone.RateLimitHeader), zone.Name),
+				Key:    entry.Key.String(zone.RateLimitHeader),
+				Zone:   zone.Name,
 				Last:   entry.Last,
 				Excess: entry.Excess,
 			})

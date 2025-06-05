@@ -11,9 +11,13 @@ document.addEventListener('DOMContentLoaded', function () {
     data.forEach(item => {
       const row = document.createElement("tr");
 
-      const idCell = document.createElement("td");
-      idCell.textContent = item.id;
-      idCell.className = "px-6 py-4";
+      const keyCell = document.createElement("td");
+      keyCell.textContent = item.key;
+      keyCell.className = "px-6 py-4";
+
+      const zoneCell = document.createElement("td");
+      zoneCell.textContent = item.zone;
+      zoneCell.className = "px-6 py-4";
 
       const lastCell = document.createElement("td");
 
@@ -33,7 +37,8 @@ document.addEventListener('DOMContentLoaded', function () {
       excessCell.textContent = item.excess;
       excessCell.className = "px-6 py-4";
 
-      row.appendChild(idCell);
+      row.appendChild(keyCell);
+      row.appendChild(zoneCell);
       row.appendChild(lastCell);
       row.appendChild(excessCell);
 
