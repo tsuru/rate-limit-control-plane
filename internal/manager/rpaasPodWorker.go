@@ -57,18 +57,25 @@ func (w *RpaasPodWorker) GetID() string {
 
 func (w *RpaasPodWorker) Work() {
 	for {
+
 		select {
 		case zoneName := <-w.ReadZoneChan:
 			go func() {
 				zoneData, err := w.getZoneData(zoneName)
 				if err != nil {
 					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.PodName, err)}
-				} else {
-					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
+					return
 				}
+				w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
 			}()
-		case <-w.WriteZoneChan:
-			// TODO: Implement the logic to write zone data to the pod
+		case zone := <-w.WriteZoneChan:
+			endpoint := fmt.Sprintf("%s/%s/%s", w.PodURL, "rate-limit", zone.Name)
+			w.logger.Info("Writing zone data", "zone", zone.Name, "endpoint", endpoint)
+
+			err := w.sendRequest(zone.RateLimitHeader, zone.RateLimitEntries, endpoint)
+			if err != nil {
+				w.logger.Error("Error writing zone data", "zone", zone.Name, "error", err)
+			}
 		case <-w.StopChan:
 			w.cleanup()
 			return
