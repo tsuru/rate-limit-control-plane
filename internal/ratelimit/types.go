@@ -27,6 +27,14 @@ type RateLimitEntry struct {
 	Excess int64
 }
 
+func (r *RateLimitEntry) NonMonotic(header RateLimitHeader) {
+	r.Last = header.Now - (header.NowMonotonic - r.Last)
+}
+
+func (r *RateLimitEntry) Monotonic(header RateLimitHeader) {
+	r.Last = header.NowMonotonic - (header.Now - r.Last)
+}
+
 type Key []byte
 
 func (r Key) String(header RateLimitHeader) string {

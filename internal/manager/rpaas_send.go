@@ -15,7 +15,12 @@ func (w *RpaasPodWorker) sendRequest(header ratelimit.RateLimitHeader, entries [
 	var values []interface{} = []interface{}{
 		headerToArray(header),
 	}
-	for _, entry := range entries {
+	for i, entry := range entries {
+		entry.Monotonic(header)
+		if i == 0 {
+			fmt.Printf("Header %+v\n", header)
+			fmt.Printf("Entry %+v\n", entry)
+		}
 		values = append(values, entryToArray(entry, header))
 	}
 	if err := encoder.Encode(values); err != nil {
@@ -30,7 +35,6 @@ func (w *RpaasPodWorker) sendRequest(header ratelimit.RateLimitHeader, entries [
 	if err != nil {
 		return fmt.Errorf("error sending request to %s: %w", endpoint, err)
 	}
-	fmt.Println(resp.Status)
 	defer resp.Body.Close()
 	return nil
 }

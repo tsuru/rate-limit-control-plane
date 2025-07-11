@@ -14,30 +14,31 @@ import (
 )
 
 type RpaasPodWorker struct {
-	PodURL            string
-	RpaasInstanceName string
-	RpaasServiceName  string
-	PodName           string
-	logger            *slog.Logger
-	zoneDataChan      chan Optional[ratelimit.Zone]
-	ReadZoneChan      chan string
-	WriteZoneChan     chan ratelimit.Zone
-	StopChan          chan struct{}
-	RoundSmallestLast int64
+	PodURL                   string
+	RpaasInstanceName        string
+	RpaasServiceName         string
+	PodName                  string
+	logger                   *slog.Logger
+	zoneDataChan             chan Optional[ratelimit.Zone]
+	ReadZoneChan             chan string
+	WriteZoneChan            chan ratelimit.Zone
+	StopChan                 chan struct{}
+	RoundSmallestLastPerZone map[string]int64
 }
 
 func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
 	podLogger := logger.With("podName", podName, "podURL", podURL)
 	return &RpaasPodWorker{
-		PodURL:            podURL,
-		PodName:           podName,
-		RpaasInstanceName: rpaasInstanceName,
-		RpaasServiceName:  rpaasServiceName,
-		zoneDataChan:      zoneDataChan,
-		logger:            podLogger,
-		ReadZoneChan:      make(chan string),
-		WriteZoneChan:     make(chan ratelimit.Zone),
-		StopChan:          make(chan struct{}),
+		PodURL:                   podURL,
+		PodName:                  podName,
+		RpaasInstanceName:        rpaasInstanceName,
+		RpaasServiceName:         rpaasServiceName,
+		zoneDataChan:             zoneDataChan,
+		logger:                   podLogger,
+		ReadZoneChan:             make(chan string),
+		WriteZoneChan:            make(chan ratelimit.Zone),
+		StopChan:                 make(chan struct{}),
+		RoundSmallestLastPerZone: make(map[string]int64),
 	}
 }
 
@@ -57,7 +58,6 @@ func (w *RpaasPodWorker) GetID() string {
 
 func (w *RpaasPodWorker) Work() {
 	for {
-
 		select {
 		case zoneName := <-w.ReadZoneChan:
 			go func() {
@@ -71,7 +71,6 @@ func (w *RpaasPodWorker) Work() {
 		case zone := <-w.WriteZoneChan:
 			endpoint := fmt.Sprintf("%s/%s/%s", w.PodURL, "rate-limit", zone.Name)
 			w.logger.Info("Writing zone data", "zone", zone.Name, "endpoint", endpoint)
-
 			err := w.sendRequest(zone.RateLimitHeader, zone.RateLimitEntries, endpoint)
 			if err != nil {
 				w.logger.Error("Error writing zone data", "zone", zone.Name, "error", err)
@@ -95,9 +94,9 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	if err != nil {
 		return ratelimit.Zone{}, err
 	}
-	if w.RoundSmallestLast != 0 {
+	if w.RoundSmallestLastPerZone[zone] != 0 {
 		query := req.URL.Query()
-		query.Set("last_greater_equal", fmt.Sprintf("%d", w.RoundSmallestLast))
+		query.Set("last_greater_equal", fmt.Sprintf("%d", w.RoundSmallestLastPerZone[zone]-1))
 		req.URL.RawQuery = query.Encode()
 	}
 	start := time.Now()
@@ -134,12 +133,12 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			w.logger.Error("Error decoding entry", "error", err)
 			return ratelimit.Zone{}, err
 		}
-		if w.RoundSmallestLast == 0 {
-			w.RoundSmallestLast = message.Last
+		if w.RoundSmallestLastPerZone[zone] == 0 {
+			w.RoundSmallestLastPerZone[zone] = message.Last
 		} else {
-			w.RoundSmallestLast = min(w.RoundSmallestLast, message.Last)
+			w.RoundSmallestLastPerZone[zone] = min(w.RoundSmallestLastPerZone[zone], message.Last)
 		}
-		message.Last = toNonMonotonic(message.Last, rateLimitHeader)
+		message.NonMonotic(rateLimitHeader)
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
 	w.logger.Debug("Received rate limit entries", "zone", zone, "entries", len(rateLimitEntries))
@@ -148,10 +147,6 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		RateLimitHeader:  rateLimitHeader,
 		RateLimitEntries: rateLimitEntries,
 	}, nil
-}
-
-func toNonMonotonic(last int64, header ratelimit.RateLimitHeader) int64 {
-	return header.Now - (header.NowMonotonic - last)
 }
 
 func min(a, b int64) int64 {
