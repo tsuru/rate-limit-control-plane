@@ -6,12 +6,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tsuru/rate-limit-control-plane/internal/aggregator"
 	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
 const administrativePort = 8800
+
+type ZoneAggregator interface {
+	AggregateZones(zonePerPod []ratelimit.Zone, fullZone map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry) (ratelimit.Zone, map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry)
+}
 
 // Update RpaasInstanceSyncWorker to use GoroutineManager for managing pod workers
 type RpaasInstanceSyncWorker struct {
@@ -26,6 +29,7 @@ type RpaasInstanceSyncWorker struct {
 	zoneDataChan         chan Optional[ratelimit.Zone]
 	notify               chan ratelimit.RpaasZoneData
 	fullZones            map[string]map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry
+	aggregator           ZoneAggregator
 }
 
 type RpaasInstanceSignals struct {
@@ -34,7 +38,7 @@ type RpaasInstanceSignals struct {
 	StopChan            chan struct{}
 }
 
-func NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName string, zones []string, logger *slog.Logger, notify chan ratelimit.RpaasZoneData) *RpaasInstanceSyncWorker {
+func NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName string, zones []string, logger *slog.Logger, notify chan ratelimit.RpaasZoneData, aggregator ZoneAggregator) *RpaasInstanceSyncWorker {
 	signals := RpaasInstanceSignals{
 		StartRpaasPodWorker: make(chan [2]string),
 		StopRpaasPodWorker:  make(chan string),
@@ -54,6 +58,7 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName string, zone
 		zoneDataChan:         make(chan Optional[ratelimit.Zone]),
 		notify:               notify,
 		fullZones:            make(map[string]map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry),
+		aggregator:           aggregator,
 	}
 }
 
@@ -94,7 +99,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		// Collect zone data from all pod workers
 		zoneData := []ratelimit.Zone{}
 		operationStart := time.Now()
-		for i := 0; i < workerCount; i++ {
+		for range workerCount {
 			result := <-w.zoneDataChan
 			if result.Error != nil {
 				w.logger.Error("Error getting zone data", "error", result.Error)
@@ -114,7 +119,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 
 		// Aggregate zone data
 		operationStart = time.Now()
-		aggregatedZone, newFullZone := aggregator.AggregateZones(zoneData, w.fullZones[zone])
+		aggregatedZone, newFullZone := w.aggregator.AggregateZones(zoneData, w.fullZones[zone])
 		operationDuration = time.Since(operationStart)
 		aggregateLatencyHistogramVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone).Observe(operationDuration.Seconds())
 		if operationDuration > config.Spec.WarnZoneAggregationTime {

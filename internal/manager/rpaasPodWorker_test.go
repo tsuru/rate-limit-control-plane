@@ -40,6 +40,7 @@ func TestRpaasPodWorkerAggregationWithoutPreviousData(t *testing.T) {
 	logSpy := new(loggerSpy)
 	logHandler := slog.NewTextHandler(logSpy, nil)
 	zone := "one"
+	completeAggregator := &aggregator.CompleteAggregator{}
 
 	listener1, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
@@ -150,7 +151,7 @@ func TestRpaasPodWorkerAggregationWithoutPreviousData(t *testing.T) {
 	checkZoneDataAgainstRepoData(t, zoneData2.Value, repo2Data)
 	workersZoneData = append(workersZoneData, zoneData2.Value)
 
-	aggregatedZone, fullZone := aggregator.AggregateZones(workersZoneData, nil)
+	aggregatedZone, fullZone := completeAggregator.AggregateZones(workersZoneData, nil)
 	require.Equal(t, expectedAggregatedZone.Name, aggregatedZone.Name)
 	require.Equal(t, expectedAggregatedZone.RateLimitHeader.Key, aggregatedZone.RateLimitHeader.Key)
 	require.ElementsMatch(t, expectedAggregatedZone.RateLimitEntries, aggregatedZone.RateLimitEntries)
@@ -161,6 +162,7 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 	logSpy := new(loggerSpy)
 	logHandler := slog.NewTextHandler(logSpy, nil)
 	zone := "one"
+	completeAggregator := &aggregator.CompleteAggregator{}
 
 	listener1, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
@@ -282,7 +284,7 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 	checkZoneDataAgainstRepoData(t, zoneData2.Value, repo2Data)
 	workersZoneData = append(workersZoneData, zoneData2.Value)
 
-	aggregatedZone, fullZone := aggregator.AggregateZones(workersZoneData, previousFullZone)
+	aggregatedZone, fullZone := completeAggregator.AggregateZones(workersZoneData, previousFullZone)
 	require.Equal(t, expectedAggregatedZone.Name, aggregatedZone.Name)
 	require.Equal(t, expectedAggregatedZone.RateLimitHeader.Key, aggregatedZone.RateLimitHeader.Key)
 	require.ElementsMatch(t, expectedAggregatedZone.RateLimitEntries, aggregatedZone.RateLimitEntries)

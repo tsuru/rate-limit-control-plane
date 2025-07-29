@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/tsuru/rate-limit-control-plane/internal/aggregator"
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/manager"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
@@ -111,7 +112,7 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 	worker, exists := r.ManagerGoroutine.GetWorker(rpaasInstanceName)
 	if !exists {
 		instanceLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane"}, os.Stdout)
-		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName, zoneNames, instanceLogger, r.Notify)
+		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName, zoneNames, instanceLogger, r.Notify, &aggregator.CompleteAggregator{})
 		r.ManagerGoroutine.AddWorker(worker)
 	}
 	// convert worker to RpaasInstanceSyncWorker
