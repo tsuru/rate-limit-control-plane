@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -24,10 +25,25 @@ type RpaasPodWorker struct {
 	WriteZoneChan            chan ratelimit.Zone
 	StopChan                 chan struct{}
 	RoundSmallestLastPerZone map[string]int64
+	client                   *http.Client
 }
 
 func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
 	podLogger := logger.With("podName", podName, "podURL", podURL)
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Second,
+	}
 	return &RpaasPodWorker{
 		PodURL:                   podURL,
 		PodName:                  podName,
@@ -39,6 +55,7 @@ func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName stri
 		WriteZoneChan:            make(chan ratelimit.Zone),
 		StopChan:                 make(chan struct{}),
 		RoundSmallestLastPerZone: make(map[string]int64),
+		client:                   client,
 	}
 }
 
@@ -100,7 +117,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		req.URL.RawQuery = query.Encode()
 	}
 	start := time.Now()
-	response, err := http.DefaultClient.Do(req)
+	response, err := w.client.Do(req)
 	if err != nil {
 		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.PodURL, w.PodName, err)
 	}
