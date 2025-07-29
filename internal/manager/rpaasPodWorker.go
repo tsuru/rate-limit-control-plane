@@ -14,11 +14,14 @@ import (
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
+type RpaasPodData struct {
+	Name string
+	URL  string
+}
+
 type RpaasPodWorker struct {
-	PodURL                   string
-	RpaasInstanceName        string
-	RpaasServiceName         string
-	PodName                  string
+	RpaasPodData
+	RpaasInstanceData
 	logger                   *slog.Logger
 	zoneDataChan             chan Optional[ratelimit.Zone]
 	ReadZoneChan             chan string
@@ -28,8 +31,8 @@ type RpaasPodWorker struct {
 	client                   *http.Client
 }
 
-func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
-	podLogger := logger.With("podName", podName, "podURL", podURL)
+func NewRpaasPodWorker(rpaasPodData RpaasPodData, rpaasInstanceData RpaasInstanceData, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
+	podLogger := logger.With("podName", rpaasPodData.Name, "podURL", rpaasPodData.URL)
 	transport := &http.Transport{
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
@@ -45,10 +48,8 @@ func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName stri
 		Timeout:   10 * time.Second,
 	}
 	return &RpaasPodWorker{
-		PodURL:                   podURL,
-		PodName:                  podName,
-		RpaasInstanceName:        rpaasInstanceName,
-		RpaasServiceName:         rpaasServiceName,
+		RpaasPodData:             rpaasPodData,
+		RpaasInstanceData:        rpaasInstanceData,
 		zoneDataChan:             zoneDataChan,
 		logger:                   podLogger,
 		ReadZoneChan:             make(chan string),
@@ -70,7 +71,7 @@ func (w *RpaasPodWorker) Stop() {
 }
 
 func (w *RpaasPodWorker) GetID() string {
-	return w.PodName
+	return w.Name
 }
 
 func (w *RpaasPodWorker) Work() {
@@ -80,7 +81,7 @@ func (w *RpaasPodWorker) Work() {
 			go func() {
 				zoneData, err := w.getZoneData(zoneName)
 				if err != nil {
-					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.PodName, err)}
+					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.Name, err)}
 					return
 				}
 				w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
@@ -104,7 +105,7 @@ func (w *RpaasPodWorker) cleanup() {
 }
 
 func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
-	endpoint := fmt.Sprintf("%s/%s/%s", w.PodURL, "rate-limit", zone)
+	endpoint := fmt.Sprintf("%s/%s/%s", w.URL, "rate-limit", zone)
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return ratelimit.Zone{}, err
@@ -117,10 +118,10 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	start := time.Now()
 	response, err := w.client.Do(req)
 	if err != nil {
-		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.PodURL, w.PodName, err)
+		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.URL, w.Name, err)
 	}
 	reqDuration := time.Since(start)
-	readLatencyHistogramVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone).Observe(reqDuration.Seconds())
+	readLatencyHistogramVec.WithLabelValues(w.Name, w.Service, w.Instance, zone).Observe(reqDuration.Seconds())
 	if reqDuration > config.Spec.WarnZoneReadTime {
 		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
 	}

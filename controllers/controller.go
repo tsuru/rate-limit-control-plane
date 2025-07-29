@@ -112,7 +112,8 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 	worker, exists := r.ManagerGoroutine.GetWorker(rpaasInstanceName)
 	if !exists {
 		instanceLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane"}, os.Stdout)
-		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName, zoneNames, instanceLogger, r.Notify, &aggregator.CompleteAggregator{})
+		rpaasInstanceData := manager.RpaasInstanceData{Instance: rpaasInstanceName, Service: rpaasServiceName}
+		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceData, zoneNames, instanceLogger, r.Notify, &aggregator.CompleteAggregator{})
 		r.ManagerGoroutine.AddWorker(worker)
 	}
 	// convert worker to RpaasInstanceSyncWorker

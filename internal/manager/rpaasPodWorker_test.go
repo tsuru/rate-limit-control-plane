@@ -41,6 +41,10 @@ func TestRpaasPodWorkerAggregationWithoutPreviousData(t *testing.T) {
 	logHandler := slog.NewTextHandler(logSpy, nil)
 	zone := "one"
 	completeAggregator := &aggregator.CompleteAggregator{}
+	rpaasInstanceData := RpaasInstanceData{
+		Instance: instanceName,
+		Service:  serviceName,
+	}
 
 	listener1, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
@@ -60,13 +64,19 @@ func TestRpaasPodWorkerAggregationWithoutPreviousData(t *testing.T) {
 	// listener1.Addr().String() is in format "[::]:569393" change to "http://localhost:569393"
 	_, port1, err := net.SplitHostPort(listener1.Addr().String())
 	require.NoError(t, err)
-	url1 := fmt.Sprintf("http://localhost:%s", port1)
-	podWorker1 := NewRpaasPodWorker(url1, instanceName, instanceName, serviceName, slog.New(logHandler), zoneDataChan)
+	rpaasPodData1 := RpaasPodData{
+		Name: instanceName,
+		URL:  fmt.Sprintf("http://localhost:%s", port1),
+	}
+	podWorker1 := NewRpaasPodWorker(rpaasPodData1, rpaasInstanceData, slog.New(logHandler), zoneDataChan)
 
 	_, port2, err := net.SplitHostPort(listener2.Addr().String())
 	require.NoError(t, err)
-	url2 := fmt.Sprintf("http://localhost:%s", port2)
-	podWorker2 := NewRpaasPodWorker(url2, instanceName, instanceName, serviceName, slog.New(logHandler), zoneDataChan)
+	rpaasPodData2 := RpaasPodData{
+		Name: instanceName,
+		URL:  fmt.Sprintf("http://localhost:%s", port2),
+	}
+	podWorker2 := NewRpaasPodWorker(rpaasPodData2, rpaasInstanceData, slog.New(logHandler), zoneDataChan)
 
 	go podWorker1.Start()
 	defer podWorker1.Stop()
@@ -163,6 +173,10 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 	logHandler := slog.NewTextHandler(logSpy, nil)
 	zone := "one"
 	completeAggregator := &aggregator.CompleteAggregator{}
+	rpaasInstanceData := RpaasInstanceData{
+		Instance: instanceName,
+		Service:  serviceName,
+	}
 
 	listener1, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
@@ -182,13 +196,19 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 	// listener1.Addr().String() is in format "[::]:569393" change to "http://localhost:569393"
 	_, port1, err := net.SplitHostPort(listener1.Addr().String())
 	require.NoError(t, err)
-	url1 := fmt.Sprintf("http://localhost:%s", port1)
-	podWorker1 := NewRpaasPodWorker(url1, instanceName, instanceName, serviceName, slog.New(logHandler), zoneDataChan)
+	rpaasPodData1 := RpaasPodData{
+		Name: instanceName,
+		URL:  fmt.Sprintf("http://localhost:%s", port1),
+	}
+	podWorker1 := NewRpaasPodWorker(rpaasPodData1, rpaasInstanceData, slog.New(logHandler), zoneDataChan)
 
 	_, port2, err := net.SplitHostPort(listener2.Addr().String())
 	require.NoError(t, err)
-	url2 := fmt.Sprintf("http://localhost:%s", port2)
-	podWorker2 := NewRpaasPodWorker(url2, instanceName, instanceName, serviceName, slog.New(logHandler), zoneDataChan)
+	rpaasPodData2 := RpaasPodData{
+		Name: instanceName,
+		URL:  fmt.Sprintf("http://localhost:%s", port2),
+	}
+	podWorker2 := NewRpaasPodWorker(rpaasPodData2, rpaasInstanceData, slog.New(logHandler), zoneDataChan)
 
 	go podWorker1.Start()
 	defer podWorker1.Stop()

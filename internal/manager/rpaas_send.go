@@ -11,7 +11,7 @@ import (
 
 func (w *RpaasPodWorker) sendRequest(zone ratelimit.Zone) error {
 	var buf bytes.Buffer
-	endpoint := fmt.Sprintf("%s/%s/%s", w.PodURL, "rate-limit", zone.Name)
+	endpoint := fmt.Sprintf("%s/%s/%s", w.URL, "rate-limit", zone.Name)
 	encoder := msgpack.NewEncoder(&buf)
 
 	w.logger.Info("Writing zone data", "zone", zone.Name, "url", endpoint)
