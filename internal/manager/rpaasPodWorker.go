@@ -86,9 +86,7 @@ func (w *RpaasPodWorker) Work() {
 				w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
 			}()
 		case zone := <-w.WriteZoneChan:
-			endpoint := fmt.Sprintf("%s/%s/%s", w.PodURL, "rate-limit", zone.Name)
-			w.logger.Info("Writing zone data", "zone", zone.Name, "endpoint", endpoint)
-			err := w.sendRequest(zone.RateLimitHeader, zone.RateLimitEntries, endpoint)
+			err := w.sendRequest(zone)
 			if err != nil {
 				w.logger.Error("Error writing zone data", "zone", zone.Name, "error", err)
 			}

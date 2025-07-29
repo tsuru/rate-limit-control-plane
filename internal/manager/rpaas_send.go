@@ -9,46 +9,62 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
-func (w *RpaasPodWorker) sendRequest(header ratelimit.RateLimitHeader, entries []ratelimit.RateLimitEntry, endpoint string) error {
+func (w *RpaasPodWorker) sendRequest(zone ratelimit.Zone) error {
 	var buf bytes.Buffer
+	endpoint := fmt.Sprintf("%s/%s/%s", w.PodURL, "rate-limit", zone.Name)
 	encoder := msgpack.NewEncoder(&buf)
-	var values []interface{} = []interface{}{
-		headerToArray(header),
+
+	w.logger.Info("Writing zone data", "zone", zone.Name, "url", endpoint)
+	if len(zone.RateLimitEntries) > 0 {
+		w.logger.Info("Zone has entries", "zone", zone.Name, "entry[0]", zone.RateLimitEntries[0])
 	}
-	for i, entry := range entries {
-		entry.Monotonic(header)
-		if i == 0 {
-			fmt.Printf("Header %+v\n", header)
-			fmt.Printf("Entry %+v\n", entry)
-		}
-		values = append(values, entryToArray(entry, header))
+
+	values := []any{
+		headerToArray(zone.RateLimitHeader),
 	}
+
+	for _, entry := range zone.RateLimitEntries {
+		values = append(values, entryToArray(entry))
+	}
+
 	if err := encoder.Encode(values); err != nil {
 		return fmt.Errorf("error encoding entries: %w", err)
 	}
+
 	req, err := http.NewRequest(http.MethodPost, endpoint, &buf)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/x-msgpack")
-	resp, err := http.DefaultClient.Do(req)
+
+	resp, err := w.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("error sending request to %s: %w", endpoint, err)
 	}
-	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code %d from %s", resp.StatusCode, endpoint)
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			w.logger.Error("Error closing response body", "error", err)
+		}
+	}()
 	return nil
 }
 
-func headerToArray(header ratelimit.RateLimitHeader) []interface{} {
-	return []interface{}{
+func headerToArray(header ratelimit.RateLimitHeader) []any {
+	return []any{
 		header.Key,
 		header.Now,
 		header.NowMonotonic,
 	}
 }
 
-func entryToArray(entry ratelimit.RateLimitEntry, header ratelimit.RateLimitHeader) []interface{} {
-	return []interface{}{
+func entryToArray(entry ratelimit.RateLimitEntry) []any {
+	return []any{
 		entry.Key,
 		entry.Last,
 		entry.Excess,

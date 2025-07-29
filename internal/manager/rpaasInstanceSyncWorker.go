@@ -104,7 +104,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		}
 		operationDuration := time.Since(operationStart)
 		if operationDuration > config.Spec.WarnZoneCollectionTime {
-			w.logger.Warn("Zone data collection took too long", "duration", operationDuration, "zone", zone)
+			w.logger.Warn("Zone data collection took too long", "duration", operationDuration.Milliseconds(), "zone", zone)
 		}
 
 		if len(zoneData) == 0 {
