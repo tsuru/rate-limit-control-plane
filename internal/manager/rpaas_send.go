@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 	"github.com/vmihailenco/msgpack/v5"
+
+	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
 func (w *RpaasPodWorker) sendRequest(zone ratelimit.Zone) error {
