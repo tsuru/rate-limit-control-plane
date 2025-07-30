@@ -112,6 +112,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 			}
 			zoneData = append(zoneData, result.Value)
 		}
+		w.logger.Info("Collected zone data", "zone", zone, "entries", zoneData)
 		operationDuration := time.Since(operationStart)
 		if operationDuration > config.Spec.WarnZoneCollectionTime {
 			w.logger.Warn("Zone data collection took too long", "duration", operationDuration.Milliseconds(), "zone", zone)
@@ -127,13 +128,15 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		aggregatedZone, newFullZone := w.aggregator.AggregateZones(zoneData, w.fullZones[zone])
 		operationDuration = time.Since(operationStart)
 		aggregateLatencyHistogramVec.WithLabelValues(w.Instance, w.Service, zone).Observe(operationDuration.Seconds())
-		if operationDuration > config.Spec.WarnZoneAggregationTime {
-			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
-		}
 		if config.Spec.FeatureFlagPersistAggregatedData {
 			w.fullZones[zone] = newFullZone
 		}
 		w.Unlock()
+
+		if operationDuration > config.Spec.WarnZoneAggregationTime {
+			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
+		}
+		w.logger.Info("Aggregated zone data", "zone", zone, "entries", aggregatedZone.RateLimitEntries)
 
 		rpaasZoneData.Data = append(rpaasZoneData.Data, aggregatedZone)
 
@@ -172,7 +175,7 @@ func (w *RpaasInstanceSyncWorker) Stop() {
 }
 
 func (w *RpaasInstanceSyncWorker) GetID() string {
-	return fmt.Sprintf("%s-%s", w.Service, w.Instance)
+	return w.Instance
 }
 
 func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
@@ -189,4 +192,10 @@ func (w *RpaasInstanceSyncWorker) RemovePodWorker(podName string) error {
 		return fmt.Errorf("pod worker not found: %s", podName)
 	}
 	return nil
+}
+
+func (w *RpaasInstanceSyncWorker) CountWorkers() int {
+	w.Lock()
+	defer w.Unlock()
+	return len(w.PodWorkerManager.ListWorkerIDs())
 }

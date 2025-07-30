@@ -15,16 +15,12 @@ func (w *RpaasPodWorker) sendRequest(zone ratelimit.Zone) error {
 	endpoint := fmt.Sprintf("%s/%s/%s", w.URL, "rate-limit", zone.Name)
 	encoder := msgpack.NewEncoder(&buf)
 
-	w.logger.Info("Writing zone data", "zone", zone.Name, "url", endpoint)
-	if len(zone.RateLimitEntries) > 0 {
-		w.logger.Info("Zone has entries", "zone", zone.Name, "entry[0]", zone.RateLimitEntries[0])
-	}
-
 	values := []any{
 		headerToArray(zone.RateLimitHeader),
 	}
 
 	for _, entry := range zone.RateLimitEntries {
+		entry.Monotonic(zone.RateLimitHeader)
 		values = append(values, entryToArray(entry))
 	}
 

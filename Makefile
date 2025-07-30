@@ -54,7 +54,7 @@ build-docker-minikube:
 	docker build -t $(IMAGE) .
 
 .PHONY: save-docker-minikube
-save-docker-minikube: build-docker-minikube
+save-docker-minikube: #build-docker-minikube
 	docker save $(IMAGE) | minikube image load -
 
 .PHONY: minikube-run
@@ -62,3 +62,12 @@ minikube-run: save-docker-minikube
 	kubectl run rate-limit-control-plane --rm -i --tty --image $(IMAGE) \
 		-n $(NAMESPACE) --image-pull-policy Never \
 		--overrides='{ "spec": { "serviceAccountName": "rpaas-operator" } }'
+
+.PHONY: minikube-service
+minikube-service:
+	kubectl expose pod rate-limit-control-plane -n $(NAMESPACE) --type=LoadBalancer --port=8082 --name=rate-limit-control-plane-service
+	minikube service rate-limit-control-plane-service -n $(NAMESPACE) --url
+
+.PHONY: minikube-delete
+minikube-delete:
+	kubectl delete service rate-limit-control-plane-service -n $(NAMESPACE)
