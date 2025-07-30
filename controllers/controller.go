@@ -16,9 +16,8 @@ import (
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
 	"github.com/vmihailenco/msgpack/v5"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -209,7 +208,7 @@ func (r *RateLimitControllerReconcile) getNginxRateLimitingZones(nginxInstance *
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
-		defer response.Body.Close()
+
 	}
 	decoder := msgpack.NewDecoder(response.Body)
 	if err := decoder.Decode(&zones); err != nil {
