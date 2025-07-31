@@ -84,6 +84,7 @@ func (w *RpaasPodWorker) Work() {
 					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.Name, err)}
 					return
 				}
+				w.logger.Debug("Zone data retrieved", "zone", zoneName, "pod", w.Name, "entries", zoneData.RateLimitEntries)
 				w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
 			}()
 		case zone := <-w.WriteZoneChan:
@@ -157,7 +158,6 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		message.NonMonotic(rateLimitHeader)
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
-	w.logger.Debug("Received rate limit entries", "zone", zone, "entries", len(rateLimitEntries))
 	return ratelimit.Zone{
 		Name:             zone,
 		RateLimitHeader:  rateLimitHeader,

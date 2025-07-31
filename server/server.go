@@ -12,6 +12,7 @@ import (
 	fiberLogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/template/html/v2"
 
+	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
 )
@@ -82,7 +83,8 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 
 	app.Get("/ws/:rpaasName", websocket.New(func(c *websocket.Conn) {
 		rpaasName := c.Params("rpaasName")
-		for {
+		ticker := time.NewTicker(config.Spec.ControllerIntervalDuration)
+		for range ticker.C {
 			data, ok := repo.GetRpaasZoneData(rpaasName)
 			if !ok {
 				if err := c.WriteMessage(websocket.TextMessage, []byte("Not Found")); err != nil {
@@ -94,7 +96,6 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 				serverLogger.Error("Error sending message", "error", err)
 				return
 			}
-			time.Sleep(2 * time.Second)
 		}
 	}))
 

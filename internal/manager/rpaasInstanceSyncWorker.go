@@ -46,7 +46,7 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceData RpaasInstanceData, zones []str
 		StopRpaasPodWorker:  make(chan string),
 		StopChan:            make(chan struct{}),
 	}
-	ticker := time.NewTicker(config.Spec.ControllerMinutesInternal)
+	ticker := time.NewTicker(config.Spec.ControllerIntervalDuration)
 	instanceLogger := logger.With("instanceName", rpaasInstanceData.Instance)
 
 	fullZones := make(map[string]map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry)
@@ -136,7 +136,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		if operationDuration > config.Spec.WarnZoneAggregationTime {
 			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
 		}
-		w.logger.Info("Aggregated zone data", "zone", zone, "entries", aggregatedZone.RateLimitEntries)
+		w.logger.Debug("Aggregated zone data", "zone", zone, "entries", aggregatedZone.RateLimitEntries)
 
 		rpaasZoneData.Data = append(rpaasZoneData.Data, aggregatedZone)
 
