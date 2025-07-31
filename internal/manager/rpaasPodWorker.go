@@ -24,11 +24,12 @@ type RpaasPodWorker struct {
 	WriteZoneChan     chan ratelimit.Zone
 	StopChan          chan struct{}
 	RoundSmallestLast int64
+	startTime         time.Time
 }
 
 func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
 	podLogger := logger.With("podName", podName, "podURL", podURL)
-	return &RpaasPodWorker{
+	worker := &RpaasPodWorker{
 		PodURL:            podURL,
 		PodName:           podName,
 		RpaasInstanceName: rpaasInstanceName,
@@ -38,7 +39,14 @@ func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName stri
 		ReadZoneChan:      make(chan string),
 		WriteZoneChan:     make(chan ratelimit.Zone),
 		StopChan:          make(chan struct{}),
+		startTime:         time.Now(),
 	}
+
+	// Initialize worker metrics
+	activeWorkersGaugeVec.WithLabelValues(rpaasServiceName, "pod").Inc()
+	workerUptimeGaugeVec.WithLabelValues(podName, "pod", rpaasInstanceName, rpaasServiceName).Set(0)
+
+	return worker
 }
 
 func (w *RpaasPodWorker) Start() {
@@ -48,6 +56,8 @@ func (w *RpaasPodWorker) Start() {
 func (w *RpaasPodWorker) Stop() {
 	if w.StopChan != nil {
 		w.StopChan <- struct{}{}
+		// Decrement active worker count
+		activeWorkersGaugeVec.WithLabelValues(w.RpaasServiceName, "pod").Dec()
 	}
 }
 
@@ -56,6 +66,10 @@ func (w *RpaasPodWorker) GetID() string {
 }
 
 func (w *RpaasPodWorker) Work() {
+	// Update worker uptime periodically
+	uptimeTicker := time.NewTicker(30 * time.Second)
+	defer uptimeTicker.Stop()
+
 	for {
 		select {
 		case zoneName := <-w.ReadZoneChan:
@@ -69,6 +83,9 @@ func (w *RpaasPodWorker) Work() {
 			}()
 		case <-w.WriteZoneChan:
 			// TODO: Implement the logic to write zone data to the pod
+		case <-uptimeTicker.C:
+			uptime := time.Since(w.startTime).Seconds()
+			workerUptimeGaugeVec.WithLabelValues(w.PodName, "pod", w.RpaasInstanceName, w.RpaasServiceName).Set(uptime)
 		case <-w.StopChan:
 			w.cleanup()
 			return
@@ -95,11 +112,19 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	}
 	start := time.Now()
 	response, err := http.DefaultClient.Do(req)
+	reqDuration := time.Since(start)
+
 	if err != nil {
+		// Record failed operation
+		readOperationsCounterVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
+		podHealthStatusGaugeVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone).Set(0)
 		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.PodURL, w.PodName, err)
 	}
-	reqDuration := time.Since(start)
+
+	// Record successful operation and latency
+	readOperationsCounterVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone, "success").Inc()
 	readLatencyHistogramVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone).Observe(reqDuration.Seconds())
+	podHealthStatusGaugeVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone).Set(1)
 	if reqDuration > config.Spec.WarnZoneReadTime {
 		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
 	}
@@ -116,6 +141,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			}, nil
 		}
 		w.logger.Error("Error decoding header", "error", err)
+		readOperationsCounterVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
 		return ratelimit.Zone{}, err
 	}
 	for {
@@ -125,6 +151,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 				break
 			}
 			w.logger.Error("Error decoding entry", "error", err)
+			readOperationsCounterVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
 			return ratelimit.Zone{}, err
 		}
 		if w.RoundSmallestLast == 0 {
@@ -136,6 +163,14 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
 	w.logger.Debug("Received rate limit entries", "zone", zone, "entries", len(rateLimitEntries))
+
+	// Record zone data size and rate limit rules count
+	zoneDataSize := response.ContentLength
+	if zoneDataSize > 0 {
+		zoneDataSizeHistogramVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone).Observe(float64(zoneDataSize))
+	}
+	rateLimitRulesActiveGaugeVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone).Set(float64(len(rateLimitEntries)))
+
 	return ratelimit.Zone{
 		Name:             zone,
 		RateLimitHeader:  rateLimitHeader,
