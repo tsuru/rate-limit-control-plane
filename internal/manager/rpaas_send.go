@@ -41,7 +41,7 @@ func (w *RpaasPodWorker) sendRequest(zone ratelimit.Zone) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code %d from %s", resp.StatusCode, endpoint)
+		return fmt.Errorf("unexpected status code %d from [%s] %s", resp.StatusCode, req.Method, endpoint)
 	}
 
 	defer func() {

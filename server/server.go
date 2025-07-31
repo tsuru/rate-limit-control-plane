@@ -83,8 +83,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 
 	app.Get("/ws/:rpaasName", websocket.New(func(c *websocket.Conn) {
 		rpaasName := c.Params("rpaasName")
-		ticker := time.NewTicker(config.Spec.ControllerIntervalDuration)
-		for range ticker.C {
+		for {
 			data, ok := repo.GetRpaasZoneData(rpaasName)
 			if !ok {
 				if err := c.WriteMessage(websocket.TextMessage, []byte("Not Found")); err != nil {
@@ -96,6 +95,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 				serverLogger.Error("Error sending message", "error", err)
 				return
 			}
+			time.Sleep(config.Spec.ControllerIntervalDuration)
 		}
 	}))
 
