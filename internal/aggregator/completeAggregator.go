@@ -6,6 +6,11 @@ import (
 
 type CompleteAggregator struct{}
 
+var emptyEntry = &ratelimit.RateLimitEntry{
+	Last:   0,
+	Excess: 0,
+}
+
 func (a *CompleteAggregator) AggregateZones(zonePerPod []ratelimit.Zone, fullZone map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry) (ratelimit.Zone, map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry) {
 	newFullZone := make(map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry)
 	for _, podZone := range zonePerPod {
@@ -17,22 +22,21 @@ func (a *CompleteAggregator) AggregateZones(zonePerPod []ratelimit.Zone, fullZon
 
 			oldEntry, oldExists := fullZone[hashID]
 			if !oldExists {
-				oldEntry = &ratelimit.RateLimitEntry{
-					Key:    entity.Key,
-					Last:   0,
-					Excess: 0,
-				}
+				oldEntry = emptyEntry
 			}
 
 			entry, exists := newFullZone[hashID]
 			if !exists {
-				entry = &ratelimit.RateLimitEntry{
-					Key: entity.Key,
-				}
+				entry = &ratelimit.RateLimitEntry{Key: entity.Key}
 				newFullZone[hashID] = entry
 			}
 
-			entry.Excess += entity.Excess - oldEntry.Excess
+			delta := entity.Excess - oldEntry.Excess
+			if delta < 0 {
+				delta = delta / int64(len(zonePerPod))
+			}
+
+			entry.Excess += delta
 			entry.Last = max(entry.Last, entity.Last)
 		}
 	}
