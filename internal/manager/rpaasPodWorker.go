@@ -27,7 +27,8 @@ type RpaasPodWorker struct {
 	ReadZoneChan             chan string
 	WriteZoneChan            chan ratelimit.Zone
 	StopChan                 chan struct{}
-	RoundSmallestLastPerZone map[string]int64
+	roundSmallestLastPerZone map[string]int64
+	lastHeaderPerZone        map[string]ratelimit.RateLimitHeader
 	client                   *http.Client
 }
 
@@ -55,7 +56,8 @@ func NewRpaasPodWorker(rpaasPodData RpaasPodData, rpaasInstanceData RpaasInstanc
 		ReadZoneChan:             make(chan string),
 		WriteZoneChan:            make(chan ratelimit.Zone),
 		StopChan:                 make(chan struct{}),
-		RoundSmallestLastPerZone: make(map[string]int64),
+		roundSmallestLastPerZone: make(map[string]int64),
+		lastHeaderPerZone:        make(map[string]ratelimit.RateLimitHeader),
 		client:                   client,
 	}
 }
@@ -111,9 +113,9 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	if err != nil {
 		return ratelimit.Zone{}, err
 	}
-	if w.RoundSmallestLastPerZone[zone] != 0 {
+	if w.roundSmallestLastPerZone[zone] != 0 {
 		query := req.URL.Query()
-		query.Set("last_greater_equal", fmt.Sprintf("%d", w.RoundSmallestLastPerZone[zone]-1))
+		query.Set("last_greater_equal", fmt.Sprintf("%d", w.roundSmallestLastPerZone[zone]-1))
 		req.URL.RawQuery = query.Encode()
 	}
 	start := time.Now()
@@ -132,6 +134,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	rateLimitEntries := []ratelimit.RateLimitEntry{}
 	if err := decoder.Decode(&rateLimitHeader); err != nil {
 		if err == io.EOF {
+			w.lastHeaderPerZone[zone] = rateLimitHeader
 			return ratelimit.Zone{
 				Name:             zone,
 				RateLimitHeader:  rateLimitHeader,
@@ -141,6 +144,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		w.logger.Error("Error decoding header", "error", err)
 		return ratelimit.Zone{}, err
 	}
+	w.lastHeaderPerZone[zone] = rateLimitHeader
 	for {
 		var message ratelimit.RateLimitEntry
 		if err := decoder.Decode(&message); err != nil {
@@ -150,10 +154,10 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			w.logger.Error("Error decoding entry", "error", err)
 			return ratelimit.Zone{}, err
 		}
-		if w.RoundSmallestLastPerZone[zone] == 0 {
-			w.RoundSmallestLastPerZone[zone] = message.Last
+		if w.roundSmallestLastPerZone[zone] == 0 {
+			w.roundSmallestLastPerZone[zone] = message.Last
 		} else {
-			w.RoundSmallestLastPerZone[zone] = min(w.RoundSmallestLastPerZone[zone], message.Last)
+			w.roundSmallestLastPerZone[zone] = min(w.roundSmallestLastPerZone[zone], message.Last)
 		}
 		message.NonMonotic(rateLimitHeader)
 		rateLimitEntries = append(rateLimitEntries, message)

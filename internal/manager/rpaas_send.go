@@ -11,16 +11,20 @@ import (
 )
 
 func (w *RpaasPodWorker) sendRequest(zone ratelimit.Zone) error {
+	rateLimitHeader, ok := w.lastHeaderPerZone[zone.Name]
+	if !ok {
+		rateLimitHeader = zone.RateLimitHeader
+	}
 	var buf bytes.Buffer
 	endpoint := fmt.Sprintf("%s/%s/%s", w.URL, "rate-limit", zone.Name)
 	encoder := msgpack.NewEncoder(&buf)
 
 	values := []any{
-		headerToArray(zone.RateLimitHeader),
+		headerToArray(rateLimitHeader),
 	}
 
 	for _, entry := range zone.RateLimitEntries {
-		entry.Monotonic(zone.RateLimitHeader)
+		entry.Monotonic(rateLimitHeader)
 		values = append(values, entryToArray(entry))
 	}
 
