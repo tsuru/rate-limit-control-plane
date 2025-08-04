@@ -123,25 +123,25 @@ func TestRpaasPodWorkerAggregationWithoutPreviousData(t *testing.T) {
 			{
 				Key:    []byte("192.168.0.1"),
 				Last:   now - 25,
-				Excess: 1030,
+				Excess: 2060,
 			},
 			{
 				Key:    []byte("192.168.0.2"),
 				Last:   now - 100,
-				Excess: 520,
+				Excess: 1040,
 			},
 			{
 				Key:    []byte("192.168.0.3"),
 				Last:   now - 150,
-				Excess: 990,
+				Excess: 1980,
 			},
 		},
 	}
 
 	expectedFullZone := map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry{
-		{Zone: "one", Key: "192.168.0.1"}: {Key: []byte("192.168.0.1"), Excess: 1030, Last: now - 25},
-		{Zone: "one", Key: "192.168.0.2"}: {Key: []byte("192.168.0.2"), Excess: 520, Last: now - 100},
-		{Zone: "one", Key: "192.168.0.3"}: {Key: []byte("192.168.0.3"), Excess: 990, Last: now - 150},
+		{Zone: "one", Key: "192.168.0.1"}: {Key: []byte("192.168.0.1"), Excess: 2060, Last: now - 25},
+		{Zone: "one", Key: "192.168.0.2"}: {Key: []byte("192.168.0.2"), Excess: 1040, Last: now - 100},
+		{Zone: "one", Key: "192.168.0.3"}: {Key: []byte("192.168.0.3"), Excess: 1980, Last: now - 150},
 	}
 
 	setRepositoryData(repository1, zone, repo1Data)
@@ -265,7 +265,7 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 			{
 				Key:    []byte("192.168.0.1"),
 				Last:   now - 55,
-				Excess: 1120,
+				Excess: 1210,
 			},
 			{
 				Key:    []byte("192.168.0.2"),
@@ -275,15 +275,15 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 			{
 				Key:    []byte("192.168.0.3"),
 				Last:   now - 180,
-				Excess: 955,
+				Excess: 965,
 			},
 		},
 	}
 
 	expectedFullZone := map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry{
-		{Zone: "one", Key: "192.168.0.1"}: {Key: []byte("192.168.0.1"), Excess: 1120, Last: now - 55},
+		{Zone: "one", Key: "192.168.0.1"}: {Key: []byte("192.168.0.1"), Excess: 1210, Last: now - 55},
 		{Zone: "one", Key: "192.168.0.2"}: {Key: []byte("192.168.0.2"), Excess: 520, Last: now - 100},
-		{Zone: "one", Key: "192.168.0.3"}: {Key: []byte("192.168.0.3"), Excess: 955, Last: now - 180},
+		{Zone: "one", Key: "192.168.0.3"}: {Key: []byte("192.168.0.3"), Excess: 965, Last: now - 180},
 	}
 
 	setRepositoryData(repository1, zone, repo1Data)
