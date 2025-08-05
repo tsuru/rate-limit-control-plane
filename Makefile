@@ -54,7 +54,7 @@ build-docker-minikube:
 	docker build -t $(IMAGE) .
 
 .PHONY: save-docker-minikube
-save-docker-minikube: #build-docker-minikube
+save-docker-minikube: build-docker-minikube
 	docker save $(IMAGE) | minikube image load -
 
 .PHONY: minikube-run
