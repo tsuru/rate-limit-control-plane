@@ -208,8 +208,8 @@ func (r *RateLimitControllerReconcile) getNginxRateLimitingZones(nginxInstance *
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
-
 	}
+	defer response.Body.Close()
 	decoder := msgpack.NewDecoder(response.Body)
 	if err := decoder.Decode(&zones); err != nil {
 		return nil, err
