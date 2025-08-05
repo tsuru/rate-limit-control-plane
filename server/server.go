@@ -12,6 +12,7 @@ import (
 	fiberLogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/template/html/v2"
 
+	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
 	"github.com/tsuru/rate-limit-control-plane/internal/repository"
 )
@@ -94,7 +95,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 				serverLogger.Error("Error sending message", "error", err)
 				return
 			}
-			time.Sleep(2 * time.Second)
+			time.Sleep(config.Spec.ControllerIntervalDuration)
 		}
 	}))
 

@@ -9,6 +9,7 @@ import (
 )
 
 func TestAggregateZones(t *testing.T) {
+	aggregator := &CompleteAggregator{}
 	t.Run("Should aggregate zone without previous data", func(t *testing.T) {
 		zonePerPod := []ratelimit.Zone{
 			{
@@ -70,7 +71,7 @@ func TestAggregateZones(t *testing.T) {
 			{Zone: "zone1", Key: "key3"}: {Key: []byte("key3"), Last: 25, Excess: 12},
 		}
 
-		resultZone, resultFullZone := AggregateZones(zonePerPod, fullZone)
+		resultZone, resultFullZone := aggregator.AggregateZones(zonePerPod, fullZone)
 
 		assertZone(t, expectedZone, resultZone)
 		assert.Equal(t, expectedFullZone, resultFullZone)
@@ -142,7 +143,7 @@ func TestAggregateZones(t *testing.T) {
 			{Zone: "zone1", Key: "key3"}: {Key: []byte("key3"), Last: 50, Excess: 17},
 		}
 
-		resultZone, resultFullZone := AggregateZones(zonePerPod, fullZone)
+		resultZone, resultFullZone := aggregator.AggregateZones(zonePerPod, fullZone)
 
 		assertZone(t, expectedZone, resultZone)
 		assert.Equal(t, expectedFullZone, resultFullZone)
@@ -209,7 +210,7 @@ func TestAggregateZones(t *testing.T) {
 			{Zone: "zone1", Key: "key3"}: {Key: []byte("key3"), Last: 25, Excess: 12},
 		}
 
-		resultZone, resultFullZone := AggregateZones(zonePerPod, fullZone)
+		resultZone, resultFullZone := aggregator.AggregateZones(zonePerPod, fullZone)
 
 		assertZone(t, expectedZone, resultZone)
 		assert.Equal(t, expectedFullZone, resultFullZone)
@@ -275,7 +276,7 @@ func TestAggregateZones(t *testing.T) {
 			{Zone: "zone1", Key: "key3"}: {Key: []byte("key3"), Last: 25, Excess: 12},
 		}
 
-		secondResultZone, secondResultFullZone := AggregateZones(secondZonePerPod, resultFullZone)
+		secondResultZone, secondResultFullZone := aggregator.AggregateZones(secondZonePerPod, resultFullZone)
 
 		assertZone(t, secondExpectedZone, secondResultZone)
 		assert.Equal(t, secondExpectedFullZone, secondResultFullZone)
@@ -348,7 +349,7 @@ func TestAggregateZones(t *testing.T) {
 			{Zone: "zone1", Key: "key3"}: {Key: []byte("key3"), Last: 65, Excess: 0},
 		}
 
-		resultZone, resultFullZone := AggregateZones(zonePerPod, fullZone)
+		resultZone, resultFullZone := aggregator.AggregateZones(zonePerPod, fullZone)
 
 		assertZone(t, expectedZone, resultZone)
 		assert.Equal(t, expectedFullZone, resultFullZone)
