@@ -34,8 +34,6 @@ func (a *CompleteAggregator) AggregateZones(zonePerPod []ratelimit.Zone, fullZon
 			delta := entity.Excess - oldEntry.Excess
 			if delta < 0 {
 				delta = delta / int64(len(zonePerPod))
-			} else {
-				delta = delta * int64(len(zonePerPod))
 			}
 
 			entry.Excess += delta
