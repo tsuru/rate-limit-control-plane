@@ -99,7 +99,7 @@ func TestAggregateZones(t *testing.T) {
 					NowMonotonic: 40,
 				},
 				RateLimitEntries: []ratelimit.RateLimitEntry{
-					{Key: []byte("key1"), Last: 30, Excess: 10},
+					{Key: []byte("key1"), Last: 30, Excess: 11},
 					{Key: []byte("key3"), Last: 50, Excess: 17},
 				},
 			},
@@ -294,7 +294,7 @@ func TestAggregateZones(t *testing.T) {
 				RateLimitEntries: []ratelimit.RateLimitEntry{
 					{Key: []byte("key1"), Last: 20, Excess: 15},
 					{Key: []byte("key2"), Last: 40, Excess: 15},
-					{Key: []byte("key3"), Last: 65, Excess: 0},
+					{Key: []byte("key3"), Last: 65, Excess: 2},
 				},
 			},
 			{
@@ -305,8 +305,8 @@ func TestAggregateZones(t *testing.T) {
 					NowMonotonic: 40,
 				},
 				RateLimitEntries: []ratelimit.RateLimitEntry{
-					{Key: []byte("key1"), Last: 30, Excess: 10},
-					{Key: []byte("key3"), Last: 50, Excess: 0},
+					{Key: []byte("key1"), Last: 30, Excess: 11},
+					{Key: []byte("key3"), Last: 50, Excess: 2},
 				},
 			},
 		}
@@ -314,7 +314,7 @@ func TestAggregateZones(t *testing.T) {
 		fullZone := map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry{
 			{Zone: "zone1", Key: "key1"}: {Key: []byte("key1"), Last: 15, Excess: 12},
 			{Zone: "zone1", Key: "key2"}: {Key: []byte("key2"), Last: 20, Excess: 10},
-			{Zone: "zone1", Key: "key3"}: {Key: []byte("key3"), Last: 25, Excess: 16},
+			{Zone: "zone1", Key: "key3"}: {Key: []byte("key3"), Last: 25, Excess: 12},
 		}
 
 		expectedZone := ratelimit.Zone{

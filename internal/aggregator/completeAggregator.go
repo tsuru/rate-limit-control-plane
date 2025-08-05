@@ -31,12 +31,7 @@ func (a *CompleteAggregator) AggregateZones(zonePerPod []ratelimit.Zone, fullZon
 				newFullZone[hashID] = entry
 			}
 
-			delta := entity.Excess - oldEntry.Excess
-			if delta < 0 {
-				delta = delta / int64(len(zonePerPod))
-			}
-
-			entry.Excess += delta
+			entry.Excess += entity.Excess - oldEntry.Excess
 			entry.Last = max(entry.Last, entity.Last)
 		}
 	}

@@ -275,7 +275,7 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 			{
 				Key:    []byte("192.168.0.3"),
 				Last:   now - 180,
-				Excess: 955,
+				Excess: 910,
 			},
 		},
 	}
@@ -283,7 +283,7 @@ func TestRpaasPodWorkerAggregationWithPreviousData(t *testing.T) {
 	expectedFullZone := map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry{
 		{Zone: "one", Key: "192.168.0.1"}: {Key: []byte("192.168.0.1"), Excess: 1120, Last: now - 55},
 		{Zone: "one", Key: "192.168.0.2"}: {Key: []byte("192.168.0.2"), Excess: 520, Last: now - 100},
-		{Zone: "one", Key: "192.168.0.3"}: {Key: []byte("192.168.0.3"), Excess: 955, Last: now - 180},
+		{Zone: "one", Key: "192.168.0.3"}: {Key: []byte("192.168.0.3"), Excess: 910, Last: now - 180},
 	}
 
 	setRepositoryData(repository1, zone, repo1Data)
