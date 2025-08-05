@@ -115,7 +115,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		w.logger.Info("Collected zone data", "zone", zone, "entries", zoneData)
 		operationDuration := time.Since(operationStart)
 		if operationDuration > config.Spec.WarnZoneCollectionTime {
-			w.logger.Warn("Zone data collection took too long", "duration", operationDuration.Milliseconds(), "zone", zone)
+			w.logger.Warn("Zone data collection took too long", "durationMilliseconds", operationDuration.Milliseconds(), "zone", zone)
 		}
 
 		if len(zoneData) == 0 {
@@ -134,7 +134,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		w.Unlock()
 
 		if operationDuration > config.Spec.WarnZoneAggregationTime {
-			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
+			w.logger.Warn("Zone data aggregation took too long", "durationMilliseconds", operationDuration.Milliseconds(), "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
 		}
 		w.logger.Debug("Aggregated zone data", "zone", zone, "entries", aggregatedZone.RateLimitEntries)
 
