@@ -84,10 +84,10 @@ func (w *RpaasPodWorker) Work() {
 				zoneData, err := w.getZoneData(zoneName)
 				if err != nil {
 					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.Name, err)}
-					return
+				} else {
+					w.logger.Debug("Zone data retrieved", "zone", zoneName, "pod", w.Name, "entries", zoneData.RateLimitEntries)
+					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
 				}
-				w.logger.Debug("Zone data retrieved", "zone", zoneName, "pod", w.Name, "entries", zoneData.RateLimitEntries)
-				w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
 			}()
 		case zone := <-w.WriteZoneChan:
 			err := w.sendRequest(zone)
@@ -108,7 +108,7 @@ func (w *RpaasPodWorker) cleanup() {
 }
 
 func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
-	endpoint := fmt.Sprintf("%s/%s/%s", w.URL, "rate-limit", zone)
+	endpoint := fmt.Sprintf("%s/rate-limit/%s", w.URL, zone)
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return ratelimit.Zone{}, err
