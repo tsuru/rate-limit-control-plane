@@ -12,7 +12,7 @@ import (
 )
 
 type Specification struct {
-	ControllerMinutesInternal        time.Duration `default:"1s" envconfig:"controller_minutes_interval"`
+	ControllerIntervalDuration       time.Duration `default:"1s" envconfig:"controller_interval_duration"`
 	LogLevel                         string        `default:"info" envconfig:"log_level"`
 	WarnZoneCollectionTime           time.Duration `default:"100ms" envconfig:"warn_zone_collection_time"`
 	WarnZoneReadTime                 time.Duration `default:"50ms" envconfig:"warn_zone_read_time"`
