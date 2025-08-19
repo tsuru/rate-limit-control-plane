@@ -43,7 +43,7 @@ var rateLimitEntriesCounterVec = prometheus.NewCounterVec(prometheus.CounterOpts
 	Namespace: "rate_limit_control_plane",
 	Name:      "rpaas_rate_limit_entries_total",
 	Help:      "Total number of rate limit entries by action",
-}, []string{"rpaas_instance", "service_name", "zone", "action"})
+}, []string{"service_name", "rpaas_instance", "zone", "action"})
 
 // System/Resource Metrics
 var zoneDataRepositoryMemoryGauge = prometheus.NewGauge(prometheus.GaugeOpts{
