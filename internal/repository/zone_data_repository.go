@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"runtime"
 	"sync"
 
 	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/logger"
+	"github.com/tsuru/rate-limit-control-plane/internal/manager"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
@@ -39,6 +41,8 @@ func (z *ZoneDataRepository) startReader() {
 
 func (z *ZoneDataRepository) insert(rpaasZoneData ratelimit.RpaasZoneData) {
 	z.Lock()
+	defer z.Unlock()
+
 	serverData := []Data{}
 	for _, zone := range rpaasZoneData.Data {
 		for _, entry := range zone.RateLimitEntries {
@@ -54,11 +58,14 @@ func (z *ZoneDataRepository) insert(rpaasZoneData ratelimit.RpaasZoneData) {
 	dataBytes, err := json.MarshalIndent(serverData, "  ", "  ")
 	if err != nil {
 		z.logger.Error("Error marshaling JSON", "error", err)
-		z.Unlock()
 		return
 	}
 	z.Data[rpaasZoneData.RpaasName] = dataBytes
-	z.Unlock()
+
+	// Update repository memory usage metric
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	manager.GetZoneDataRepositoryMemoryGauge().Set(float64(memStats.HeapInuse))
 }
 
 func (z *ZoneDataRepository) GetRpaasZoneData(rpaasName string) ([]byte, bool) {

@@ -48,7 +48,8 @@ func NewRpaasPodWorker(rpaasPodData RpaasPodData, rpaasInstanceData RpaasInstanc
 		Transport: transport,
 		Timeout:   10 * time.Second,
 	}
-	return &RpaasPodWorker{
+
+	worker := &RpaasPodWorker{
 		RpaasPodData:             rpaasPodData,
 		RpaasInstanceData:        rpaasInstanceData,
 		zoneDataChan:             zoneDataChan,
@@ -60,6 +61,10 @@ func NewRpaasPodWorker(rpaasPodData RpaasPodData, rpaasInstanceData RpaasInstanc
 		lastHeaderPerZone:        make(map[string]ratelimit.RateLimitHeader),
 		client:                   client,
 	}
+
+	activeWorkersGaugeVec.WithLabelValues(rpaasInstanceData.Service, rpaasInstanceData.Instance, "pod").Inc()
+
+	return worker
 }
 
 func (w *RpaasPodWorker) Start() {
@@ -69,6 +74,8 @@ func (w *RpaasPodWorker) Start() {
 func (w *RpaasPodWorker) Stop() {
 	if w.StopChan != nil {
 		w.StopChan <- struct{}{}
+		// Decrement active worker count
+		activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "pod").Dec()
 	}
 }
 
@@ -121,13 +128,17 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 	start := time.Now()
 	response, err := w.client.Do(req)
 	if err != nil {
+		readOperationsCounterVec.WithLabelValues(w.Service, w.Instance, zone, "error").Inc()
 		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.URL, w.Name, err)
 	}
+
 	reqDuration := time.Since(start)
-	readLatencyHistogramVec.WithLabelValues(w.Name, w.Service, w.Instance, zone).Observe(reqDuration.Seconds())
+	readOperationsCounterVec.WithLabelValues(w.Service, w.Instance, zone, "success").Inc()
+	readLatencyHistogramVec.WithLabelValues(w.Service, w.Instance, zone).Observe(reqDuration.Seconds())
 	if reqDuration > config.Spec.WarnZoneReadTime {
 		w.logger.Warn("Request took too long", "durationMilliseconds", reqDuration.Milliseconds(), "zone", zone, "contentLength", response.ContentLength)
 	}
+
 	defer response.Body.Close()
 	decoder := msgpack.NewDecoder(response.Body)
 	var rateLimitHeader ratelimit.RateLimitHeader
@@ -142,6 +153,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			}, nil
 		}
 		w.logger.Error("Error decoding header", "error", err)
+		readOperationsCounterVec.WithLabelValues(w.Service, w.Instance, zone, "error").Inc()
 		return ratelimit.Zone{}, err
 	}
 	w.lastHeaderPerZone[zone] = rateLimitHeader
@@ -152,6 +164,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 				break
 			}
 			w.logger.Error("Error decoding entry", "error", err)
+			readOperationsCounterVec.WithLabelValues(w.Service, w.Instance, zone, "error").Inc()
 			return ratelimit.Zone{}, err
 		}
 		if w.roundSmallestLastPerZone[zone] == 0 {
@@ -162,6 +175,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		message.NonMonotic(rateLimitHeader)
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
+
 	return ratelimit.Zone{
 		Name:             zone,
 		RateLimitHeader:  rateLimitHeader,

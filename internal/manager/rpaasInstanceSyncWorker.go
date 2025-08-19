@@ -54,7 +54,7 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceData RpaasInstanceData, zones []str
 		fullZones[zone] = make(map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry)
 	}
 
-	return &RpaasInstanceSyncWorker{
+	worker := &RpaasInstanceSyncWorker{
 		RpaasInstanceData:    rpaasInstanceData,
 		RpaasInstanceSignals: signals,
 		PodWorkerManager:     NewGoroutineManager(),
@@ -65,6 +65,11 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceData RpaasInstanceData, zones []str
 		fullZones:            fullZones,
 		aggregator:           aggregator,
 	}
+
+	// Initialize instance worker metrics
+	activeWorkersGaugeVec.WithLabelValues(rpaasInstanceData.Service, rpaasInstanceData.Instance, "instance").Inc()
+
+	return worker
 }
 
 func (w *RpaasInstanceSyncWorker) Work() {
@@ -73,6 +78,8 @@ func (w *RpaasInstanceSyncWorker) Work() {
 		case <-w.Ticker.C:
 			w.processTick()
 		case <-w.RpaasInstanceSignals.StopChan:
+			// Decrement active worker count
+			activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "instance").Dec()
 			w.cleanup()
 			return
 		}
@@ -108,6 +115,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 			result := <-w.zoneDataChan
 			if result.Error != nil {
 				w.logger.Error("Error getting zone data", "error", result.Error)
+				aggregationFailuresCounterVec.WithLabelValues(w.Service, w.Instance, zone, "collection_error").Inc()
 				continue
 			}
 			zoneData = append(zoneData, result.Value)
@@ -127,7 +135,10 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		operationStart = time.Now()
 		aggregatedZone, newFullZone := w.aggregator.AggregateZones(zoneData, w.fullZones[zone])
 		operationDuration = time.Since(operationStart)
-		aggregateLatencyHistogramVec.WithLabelValues(w.Instance, w.Service, zone).Observe(operationDuration.Seconds())
+		aggregateLatencyHistogramVec.WithLabelValues(w.Service, w.Instance, zone).Observe(operationDuration.Seconds())
+		if operationDuration > config.Spec.WarnZoneAggregationTime {
+			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
+		}
 		if config.Spec.FeatureFlagPersistAggregatedData {
 			w.fullZones[zone] = newFullZone
 		}
@@ -139,6 +150,9 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		w.logger.Debug("Aggregated zone data", "zone", zone, "entries", aggregatedZone.RateLimitEntries)
 
 		rpaasZoneData.Data = append(rpaasZoneData.Data, aggregatedZone)
+
+		// Record rate limit entries metrics
+		rateLimitEntriesCounterVec.WithLabelValues(w.Service, w.Instance, zone, "aggregated").Add(float64(len(aggregatedZone.RateLimitEntries)))
 
 		if config.Spec.FeatureFlagPersistAggregatedData {
 			// Write aggregated data back to pod workers
