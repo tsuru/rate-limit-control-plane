@@ -67,7 +67,7 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceData RpaasInstanceData, zones []str
 	}
 
 	// Initialize instance worker metrics
-	activeWorkersGaugeVec.WithLabelValues(rpaasServiceName, rpaasInstanceName, "instance").Inc()
+	activeWorkersGaugeVec.WithLabelValues(rpaasInstanceData.Service, rpaasInstanceData.Instance, "instance").Inc()
 
 	return worker
 }
@@ -79,7 +79,7 @@ func (w *RpaasInstanceSyncWorker) Work() {
 			w.processTick()
 		case <-w.RpaasInstanceSignals.StopChan:
 			// Decrement active worker count
-			activeWorkersGaugeVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, "instance").Dec()
+			activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "instance").Dec()
 			w.cleanup()
 			return
 		}
@@ -115,7 +115,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 			result := <-w.zoneDataChan
 			if result.Error != nil {
 				w.logger.Error("Error getting zone data", "error", result.Error)
-				aggregationFailuresCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "collection_error").Inc()
+				aggregationFailuresCounterVec.WithLabelValues(w.Service, w.Instance, zone, "collection_error").Inc()
 				continue
 			}
 			zoneData = append(zoneData, result.Value)
@@ -152,7 +152,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		rpaasZoneData.Data = append(rpaasZoneData.Data, aggregatedZone)
 
 		// Record rate limit entries metrics
-		rateLimitEntriesCounterVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone, "aggregated").Add(float64(len(aggregatedZone.RateLimitEntries)))
+		rateLimitEntriesCounterVec.WithLabelValues(w.Service, w.Instance, zone, "aggregated").Add(float64(len(aggregatedZone.RateLimitEntries)))
 
 		if config.Spec.FeatureFlagPersistAggregatedData {
 			// Write aggregated data back to pod workers
