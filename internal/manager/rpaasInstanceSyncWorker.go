@@ -59,27 +59,19 @@ func NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName string, zone
 	}
 
 	// Initialize instance worker metrics
-	activeWorkersGaugeVec.WithLabelValues(rpaasServiceName, "instance").Inc()
-	workerUptimeGaugeVec.WithLabelValues(rpaasInstanceName, "instance", rpaasInstanceName, rpaasServiceName).Set(0)
+	activeWorkersGaugeVec.WithLabelValues(rpaasServiceName, rpaasInstanceName, "instance").Inc()
 
 	return worker
 }
 
 func (w *RpaasInstanceSyncWorker) Work() {
-	// Update worker uptime periodically
-	uptimeTicker := time.NewTicker(30 * time.Second)
-	defer uptimeTicker.Stop()
-
 	for {
 		select {
 		case <-w.Ticker.C:
 			w.processTick()
-		case <-uptimeTicker.C:
-			uptime := time.Since(w.startTime).Seconds()
-			workerUptimeGaugeVec.WithLabelValues(w.RpaasInstanceName, "instance", w.RpaasInstanceName, w.RpaasServiceName).Set(uptime)
 		case <-w.RpaasInstanceSignals.StopChan:
 			// Decrement active worker count
-			activeWorkersGaugeVec.WithLabelValues(w.RpaasServiceName, "instance").Dec()
+			activeWorkersGaugeVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, "instance").Dec()
 			w.cleanup()
 			return
 		}
@@ -111,11 +103,11 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		// Collect zone data from all pod workers
 		zoneData := []ratelimit.Zone{}
 		operationStart := time.Now()
-		for i := 0; i < workerCount; i++ {
+		for range workerCount {
 			result := <-w.zoneDataChan
 			if result.Error != nil {
 				w.logger.Error("Error getting zone data", "error", result.Error)
-				aggregationFailuresCounterVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone, "collection_error").Inc()
+				aggregationFailuresCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "collection_error").Inc()
 				continue
 			}
 			zoneData = append(zoneData, result.Value)
@@ -134,7 +126,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 		operationStart = time.Now()
 		aggregatedZone, newFullZone := aggregator.AggregateZones(zoneData, w.fullZones[zone])
 		operationDuration = time.Since(operationStart)
-		aggregateLatencyHistogramVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone).Observe(operationDuration.Seconds())
+		aggregateLatencyHistogramVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone).Observe(operationDuration.Seconds())
 		if operationDuration > config.Spec.WarnZoneAggregationTime {
 			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
 		}

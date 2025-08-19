@@ -43,8 +43,7 @@ func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName stri
 	}
 
 	// Initialize worker metrics
-	activeWorkersGaugeVec.WithLabelValues(rpaasServiceName, "pod").Inc()
-	workerUptimeGaugeVec.WithLabelValues(podName, "pod", rpaasInstanceName, rpaasServiceName).Set(0)
+	activeWorkersGaugeVec.WithLabelValues(rpaasServiceName, rpaasInstanceName, "pod").Inc()
 
 	return worker
 }
@@ -57,7 +56,7 @@ func (w *RpaasPodWorker) Stop() {
 	if w.StopChan != nil {
 		w.StopChan <- struct{}{}
 		// Decrement active worker count
-		activeWorkersGaugeVec.WithLabelValues(w.RpaasServiceName, "pod").Dec()
+		activeWorkersGaugeVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, "pod").Dec()
 	}
 }
 
@@ -66,10 +65,6 @@ func (w *RpaasPodWorker) GetID() string {
 }
 
 func (w *RpaasPodWorker) Work() {
-	// Update worker uptime periodically
-	uptimeTicker := time.NewTicker(30 * time.Second)
-	defer uptimeTicker.Stop()
-
 	for {
 		select {
 		case zoneName := <-w.ReadZoneChan:
@@ -83,9 +78,6 @@ func (w *RpaasPodWorker) Work() {
 			}()
 		case <-w.WriteZoneChan:
 			// TODO: Implement the logic to write zone data to the pod
-		case <-uptimeTicker.C:
-			uptime := time.Since(w.startTime).Seconds()
-			workerUptimeGaugeVec.WithLabelValues(w.PodName, "pod", w.RpaasInstanceName, w.RpaasServiceName).Set(uptime)
 		case <-w.StopChan:
 			w.cleanup()
 			return
@@ -116,15 +108,13 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 
 	if err != nil {
 		// Record failed operation
-		readOperationsCounterVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
-		podHealthStatusGaugeVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone).Set(0)
+		readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
 		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.PodURL, w.PodName, err)
 	}
 
 	// Record successful operation and latency
-	readOperationsCounterVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone, "success").Inc()
-	readLatencyHistogramVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone).Observe(reqDuration.Seconds())
-	podHealthStatusGaugeVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone).Set(1)
+	readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "success").Inc()
+	readLatencyHistogramVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone).Observe(reqDuration.Seconds())
 	if reqDuration > config.Spec.WarnZoneReadTime {
 		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
 	}
@@ -141,7 +131,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			}, nil
 		}
 		w.logger.Error("Error decoding header", "error", err)
-		readOperationsCounterVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
+		readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
 		return ratelimit.Zone{}, err
 	}
 	for {
@@ -151,7 +141,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 				break
 			}
 			w.logger.Error("Error decoding entry", "error", err)
-			readOperationsCounterVec.WithLabelValues(w.PodName, w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
+			readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
 			return ratelimit.Zone{}, err
 		}
 		if w.RoundSmallestLast == 0 {
@@ -163,13 +153,6 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
 	w.logger.Debug("Received rate limit entries", "zone", zone, "entries", len(rateLimitEntries))
-
-	// Record zone data size and rate limit rules count
-	zoneDataSize := response.ContentLength
-	if zoneDataSize > 0 {
-		zoneDataSizeHistogramVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone).Observe(float64(zoneDataSize))
-	}
-	rateLimitRulesActiveGaugeVec.WithLabelValues(w.RpaasInstanceName, w.RpaasServiceName, zone).Set(float64(len(rateLimitEntries)))
 
 	return ratelimit.Zone{
 		Name:             zone,
