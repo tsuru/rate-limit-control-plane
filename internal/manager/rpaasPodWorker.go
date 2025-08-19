@@ -74,8 +74,6 @@ func (w *RpaasPodWorker) Start() {
 func (w *RpaasPodWorker) Stop() {
 	if w.StopChan != nil {
 		w.StopChan <- struct{}{}
-		// Decrement active worker count
-		activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "pod").Dec()
 	}
 }
 
@@ -109,6 +107,7 @@ func (w *RpaasPodWorker) Work() {
 }
 
 func (w *RpaasPodWorker) cleanup() {
+	activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "pod").Dec()
 	close(w.ReadZoneChan)
 	close(w.WriteZoneChan)
 	close(w.StopChan)
