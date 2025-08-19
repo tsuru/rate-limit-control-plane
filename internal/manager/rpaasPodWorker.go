@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -13,33 +14,51 @@ import (
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
-type RpaasPodWorker struct {
-	PodURL            string
-	RpaasInstanceName string
-	RpaasServiceName  string
-	PodName           string
-	logger            *slog.Logger
-	zoneDataChan      chan Optional[ratelimit.Zone]
-	ReadZoneChan      chan string
-	WriteZoneChan     chan ratelimit.Zone
-	StopChan          chan struct{}
-	RoundSmallestLast int64
-	startTime         time.Time
+type RpaasPodData struct {
+	Name string
+	URL  string
 }
 
-func NewRpaasPodWorker(podURL, podName, rpaasInstanceName, rpaasServiceName string, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
-	podLogger := logger.With("podName", podName, "podURL", podURL)
-	worker := &RpaasPodWorker{
-		PodURL:            podURL,
-		PodName:           podName,
-		RpaasInstanceName: rpaasInstanceName,
-		RpaasServiceName:  rpaasServiceName,
-		zoneDataChan:      zoneDataChan,
-		logger:            podLogger,
-		ReadZoneChan:      make(chan string),
-		WriteZoneChan:     make(chan ratelimit.Zone),
-		StopChan:          make(chan struct{}),
-		startTime:         time.Now(),
+type RpaasPodWorker struct {
+	RpaasPodData
+	RpaasInstanceData
+	logger                   *slog.Logger
+	zoneDataChan             chan Optional[ratelimit.Zone]
+	ReadZoneChan             chan string
+	WriteZoneChan            chan ratelimit.Zone
+	StopChan                 chan struct{}
+	roundSmallestLastPerZone map[string]int64
+	lastHeaderPerZone        map[string]ratelimit.RateLimitHeader
+	client                   *http.Client
+}
+
+func NewRpaasPodWorker(rpaasPodData RpaasPodData, rpaasInstanceData RpaasInstanceData, logger *slog.Logger, zoneDataChan chan Optional[ratelimit.Zone]) *RpaasPodWorker {
+	podLogger := logger.With("podName", rpaasPodData.Name, "podURL", rpaasPodData.URL)
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Second,
+	}
+	return &RpaasPodWorker{
+		RpaasPodData:             rpaasPodData,
+		RpaasInstanceData:        rpaasInstanceData,
+		zoneDataChan:             zoneDataChan,
+		logger:                   podLogger,
+		ReadZoneChan:             make(chan string),
+		WriteZoneChan:            make(chan ratelimit.Zone),
+		StopChan:                 make(chan struct{}),
+		roundSmallestLastPerZone: make(map[string]int64),
+		lastHeaderPerZone:        make(map[string]ratelimit.RateLimitHeader),
+		client:                   client,
 	}
 
 	// Initialize worker metrics
@@ -61,7 +80,7 @@ func (w *RpaasPodWorker) Stop() {
 }
 
 func (w *RpaasPodWorker) GetID() string {
-	return w.PodName
+	return w.Name
 }
 
 func (w *RpaasPodWorker) Work() {
@@ -71,13 +90,17 @@ func (w *RpaasPodWorker) Work() {
 			go func() {
 				zoneData, err := w.getZoneData(zoneName)
 				if err != nil {
-					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.PodName, err)}
+					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: fmt.Errorf("error getting zone data from pod worker %s: %w", w.Name, err)}
 				} else {
+					w.logger.Debug("Zone data retrieved", "zone", zoneName, "pod", w.Name, "entries", zoneData.RateLimitEntries)
 					w.zoneDataChan <- Optional[ratelimit.Zone]{Value: zoneData, Error: nil}
 				}
 			}()
-		case <-w.WriteZoneChan:
-			// TODO: Implement the logic to write zone data to the pod
+		case zone := <-w.WriteZoneChan:
+			err := w.sendRequest(zone)
+			if err != nil {
+				w.logger.Error("Error writing zone data", "zone", zone.Name, "error", err)
+			}
 		case <-w.StopChan:
 			w.cleanup()
 			return
@@ -92,38 +115,37 @@ func (w *RpaasPodWorker) cleanup() {
 }
 
 func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
-	endpoint := fmt.Sprintf("%s/%s/%s", w.PodURL, "rate-limit", zone)
+	endpoint := fmt.Sprintf("%s/rate-limit/%s", w.URL, zone)
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return ratelimit.Zone{}, err
 	}
-	if w.RoundSmallestLast != 0 {
+	if w.roundSmallestLastPerZone[zone] != 0 {
 		query := req.URL.Query()
-		query.Set("last_greater_equal", fmt.Sprintf("%d", w.RoundSmallestLast))
+		query.Set("last_greater_equal", fmt.Sprintf("%d", w.roundSmallestLastPerZone[zone]-1))
 		req.URL.RawQuery = query.Encode()
 	}
 	start := time.Now()
-	response, err := http.DefaultClient.Do(req)
-	reqDuration := time.Since(start)
-
+	response, err := w.client.Do(req)
 	if err != nil {
-		// Record failed operation
-		readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
-		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.PodURL, w.PodName, err)
+    readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
+		return ratelimit.Zone{}, fmt.Errorf("error making request to pod %s (%s): %w", w.URL, w.Name, err)
 	}
-
-	// Record successful operation and latency
-	readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "success").Inc()
-	readLatencyHistogramVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone).Observe(reqDuration.Seconds())
+  
+	reqDuration := time.Since(start)
+  readOperationsCounterVec.WithLabelValues(w.Service, w.Instance, zone, "success").Inc()
+	readLatencyHistogramVec.WithLabelValues(w.Service, w.Instance, zone).Observe(reqDuration.Seconds())
 	if reqDuration > config.Spec.WarnZoneReadTime {
-		w.logger.Warn("Request took too long", "duration", reqDuration, "zone", zone, "contentLength", response.ContentLength)
+		w.logger.Warn("Request took too long", "durationMilliseconds", reqDuration.Milliseconds(), "zone", zone, "contentLength", response.ContentLength)
 	}
+  
 	defer response.Body.Close()
 	decoder := msgpack.NewDecoder(response.Body)
 	var rateLimitHeader ratelimit.RateLimitHeader
 	rateLimitEntries := []ratelimit.RateLimitEntry{}
 	if err := decoder.Decode(&rateLimitHeader); err != nil {
 		if err == io.EOF {
+			w.lastHeaderPerZone[zone] = rateLimitHeader
 			return ratelimit.Zone{
 				Name:             zone,
 				RateLimitHeader:  rateLimitHeader,
@@ -134,6 +156,7 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 		readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
 		return ratelimit.Zone{}, err
 	}
+	w.lastHeaderPerZone[zone] = rateLimitHeader
 	for {
 		var message ratelimit.RateLimitEntry
 		if err := decoder.Decode(&message); err != nil {
@@ -144,25 +167,20 @@ func (w *RpaasPodWorker) getZoneData(zone string) (ratelimit.Zone, error) {
 			readOperationsCounterVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone, "error").Inc()
 			return ratelimit.Zone{}, err
 		}
-		if w.RoundSmallestLast == 0 {
-			w.RoundSmallestLast = message.Last
+		if w.roundSmallestLastPerZone[zone] == 0 {
+			w.roundSmallestLastPerZone[zone] = message.Last
 		} else {
-			w.RoundSmallestLast = min(w.RoundSmallestLast, message.Last)
+			w.roundSmallestLastPerZone[zone] = min(w.roundSmallestLastPerZone[zone], message.Last)
 		}
-		message.Last = toNonMonotonic(message.Last, rateLimitHeader)
+		message.NonMonotic(rateLimitHeader)
 		rateLimitEntries = append(rateLimitEntries, message)
 	}
-	w.logger.Debug("Received rate limit entries", "zone", zone, "entries", len(rateLimitEntries))
 
 	return ratelimit.Zone{
 		Name:             zone,
 		RateLimitHeader:  rateLimitHeader,
 		RateLimitEntries: rateLimitEntries,
 	}, nil
-}
-
-func toNonMonotonic(last int64, header ratelimit.RateLimitHeader) int64 {
-	return header.Now - (header.NowMonotonic - last)
 }
 
 func min(a, b int64) int64 {

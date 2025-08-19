@@ -6,19 +6,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tsuru/rate-limit-control-plane/internal/aggregator"
 	"github.com/tsuru/rate-limit-control-plane/internal/config"
 	"github.com/tsuru/rate-limit-control-plane/internal/ratelimit"
 )
 
 const administrativePort = 8800
 
-// Update RpaasInstanceSyncWorker to use GoroutineManager for managing pod workers
+type ZoneAggregator interface {
+	AggregateZones(zonePerPod []ratelimit.Zone, fullZone map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry) (ratelimit.Zone, map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry)
+}
+
+type RpaasInstanceData struct {
+	Instance string
+	Service  string
+}
+
 type RpaasInstanceSyncWorker struct {
 	sync.Mutex
-	RpaasInstanceName    string
-	RpaasServiceName     string
-	Zones                []string
+	RpaasInstanceData
 	RpaasInstanceSignals RpaasInstanceSignals
 	PodWorkerManager     *GoroutineManager
 	Ticker               *time.Ticker
@@ -26,7 +31,7 @@ type RpaasInstanceSyncWorker struct {
 	zoneDataChan         chan Optional[ratelimit.Zone]
 	notify               chan ratelimit.RpaasZoneData
 	fullZones            map[string]map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry
-	startTime            time.Time
+	aggregator           ZoneAggregator
 }
 
 type RpaasInstanceSignals struct {
@@ -35,27 +40,30 @@ type RpaasInstanceSignals struct {
 	StopChan            chan struct{}
 }
 
-func NewRpaasInstanceSyncWorker(rpaasInstanceName, rpaasServiceName string, zones []string, logger *slog.Logger, notify chan ratelimit.RpaasZoneData) *RpaasInstanceSyncWorker {
+func NewRpaasInstanceSyncWorker(rpaasInstanceData RpaasInstanceData, zones []string, logger *slog.Logger, notify chan ratelimit.RpaasZoneData, aggregator ZoneAggregator) *RpaasInstanceSyncWorker {
 	signals := RpaasInstanceSignals{
 		StartRpaasPodWorker: make(chan [2]string),
 		StopRpaasPodWorker:  make(chan string),
 		StopChan:            make(chan struct{}),
 	}
-	ticker := time.NewTicker(config.Spec.ControllerMinutesInternal)
-	instanceLogger := logger.With("instanceName", rpaasInstanceName)
+	ticker := time.NewTicker(config.Spec.ControllerIntervalDuration)
+	instanceLogger := logger.With("instanceName", rpaasInstanceData.Instance)
+
+	fullZones := make(map[string]map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry)
+	for _, zone := range zones {
+		fullZones[zone] = make(map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry)
+	}
 
 	worker := &RpaasInstanceSyncWorker{
-		RpaasInstanceName:    rpaasInstanceName,
-		RpaasServiceName:     rpaasServiceName,
-		Zones:                zones,
+		RpaasInstanceData:    rpaasInstanceData,
 		RpaasInstanceSignals: signals,
 		PodWorkerManager:     NewGoroutineManager(),
 		Ticker:               ticker,
 		logger:               instanceLogger,
 		zoneDataChan:         make(chan Optional[ratelimit.Zone]),
 		notify:               notify,
-		fullZones:            make(map[string]map[ratelimit.FullZoneKey]*ratelimit.RateLimitEntry),
-		startTime:            time.Now(),
+		fullZones:            fullZones,
+		aggregator:           aggregator,
 	}
 
 	// Initialize instance worker metrics
@@ -80,10 +88,10 @@ func (w *RpaasInstanceSyncWorker) Work() {
 
 func (w *RpaasInstanceSyncWorker) processTick() {
 	rpaasZoneData := ratelimit.RpaasZoneData{
-		RpaasName: w.RpaasInstanceName,
+		RpaasName: w.Instance,
 		Data:      []ratelimit.Zone{},
 	}
-	for _, zone := range w.Zones {
+	for zone := range w.fullZones {
 		w.Lock()
 		podWorkers := w.PodWorkerManager.ListWorkerIDs()
 		workerCount := len(podWorkers)
@@ -112,9 +120,10 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 			}
 			zoneData = append(zoneData, result.Value)
 		}
+		w.logger.Info("Collected zone data", "zone", zone, "entries", zoneData)
 		operationDuration := time.Since(operationStart)
 		if operationDuration > config.Spec.WarnZoneCollectionTime {
-			w.logger.Warn("Zone data collection took too long", "duration", operationDuration, "zone", zone)
+			w.logger.Warn("Zone data collection took too long", "durationMilliseconds", operationDuration.Milliseconds(), "zone", zone)
 		}
 
 		if len(zoneData) == 0 {
@@ -124,9 +133,9 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 
 		// Aggregate zone data
 		operationStart = time.Now()
-		aggregatedZone, newFullZone := aggregator.AggregateZones(zoneData, w.fullZones[zone])
+		aggregatedZone, newFullZone := w.aggregator.AggregateZones(zoneData, w.fullZones[zone])
 		operationDuration = time.Since(operationStart)
-		aggregateLatencyHistogramVec.WithLabelValues(w.RpaasServiceName, w.RpaasInstanceName, zone).Observe(operationDuration.Seconds())
+		aggregateLatencyHistogramVec.WithLabelValues(w.Service, w.Instance, zone).Observe(operationDuration.Seconds())
 		if operationDuration > config.Spec.WarnZoneAggregationTime {
 			w.logger.Warn("Zone data aggregation took too long", "duration", operationDuration, "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
 		}
@@ -134,6 +143,11 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 			w.fullZones[zone] = newFullZone
 		}
 		w.Unlock()
+
+		if operationDuration > config.Spec.WarnZoneAggregationTime {
+			w.logger.Warn("Zone data aggregation took too long", "durationMilliseconds", operationDuration.Milliseconds(), "zone", zone, "entries", len(aggregatedZone.RateLimitEntries))
+		}
+		w.logger.Debug("Aggregated zone data", "zone", zone, "entries", aggregatedZone.RateLimitEntries)
 
 		rpaasZoneData.Data = append(rpaasZoneData.Data, aggregatedZone)
 
@@ -175,12 +189,15 @@ func (w *RpaasInstanceSyncWorker) Stop() {
 }
 
 func (w *RpaasInstanceSyncWorker) GetID() string {
-	return w.RpaasInstanceName
+	return w.Instance
 }
 
 func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
-	podURL := fmt.Sprintf("http://%s:%d", podIP, administrativePort)
-	podWorker := NewRpaasPodWorker(podURL, podName, w.RpaasInstanceName, w.RpaasServiceName, w.logger, w.zoneDataChan)
+	rpaasPodData := RpaasPodData{
+		Name: podName,
+		URL:  fmt.Sprintf("http://%s:%d", podIP, administrativePort),
+	}
+	podWorker := NewRpaasPodWorker(rpaasPodData, w.RpaasInstanceData, w.logger, w.zoneDataChan)
 	w.PodWorkerManager.AddWorker(podWorker)
 }
 
@@ -189,4 +206,10 @@ func (w *RpaasInstanceSyncWorker) RemovePodWorker(podName string) error {
 		return fmt.Errorf("pod worker not found: %s", podName)
 	}
 	return nil
+}
+
+func (w *RpaasInstanceSyncWorker) CountWorkers() int {
+	w.Lock()
+	defer w.Unlock()
+	return len(w.PodWorkerManager.ListWorkerIDs())
 }
