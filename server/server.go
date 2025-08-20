@@ -42,7 +42,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 		var instanceName string
 		for _, instance := range instances {
 			if instance == rpaasName {
-				serverLogger.Info("Instance found", "instance", rpaasName)
+				serverLogger.Debug("Instance found", "instance", rpaasName)
 				instanceName = instance
 			}
 		}
@@ -55,7 +55,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 			serverLogger.Error("Instance not found", "instance", instanceName)
 			return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 		}
-		serverLogger.Info("Serving instance data", "instance", instanceName)
+		serverLogger.Debug("Serving instance data", "instance", instanceName)
 		return c.Send(data)
 	})
 
@@ -74,7 +74,7 @@ func Notification(repo *repository.ZoneDataRepository, listenAddr string) {
 
 	app.Use("/ws/:rpaasName", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
-			serverLogger.Info("WS upgrade requested for rpaasName", "rpaasName", c.Params("rpaasName"))
+			serverLogger.Debug("WS upgrade requested for rpaasName", "rpaasName", c.Params("rpaasName"))
 			c.Locals("allowed", true)
 			return c.Next()
 		}

@@ -46,10 +46,19 @@ func (r *RateLimitControllerReconcile) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
 		WithEventFilter(predicate.Funcs{
-			CreateFunc:  func(e event.CreateEvent) bool { return true },
-			DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-			UpdateFunc:  func(e event.UpdateEvent) bool { return true },
-			GenericFunc: func(e event.GenericEvent) bool { return true },
+			CreateFunc: func(e event.CreateEvent) bool {
+				pod, ok := e.Object.(*corev1.Pod)
+				return ok && pod.Status.Phase == corev1.PodRunning && pod.Status.PodIP != ""
+			},
+			DeleteFunc: func(e event.DeleteEvent) bool { return true },
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				pod, ok := e.ObjectNew.(*corev1.Pod)
+				if !ok {
+					return false
+				}
+				return (pod.Status.Phase == corev1.PodRunning && pod.Status.PodIP != "") || (pod.Status.Phase == corev1.PodSucceeded)
+			},
+			GenericFunc: func(e event.GenericEvent) bool { return false },
 		}).
 		Complete(r)
 }
@@ -106,7 +115,9 @@ func (r *RateLimitControllerReconcile) Reconcile(ctx context.Context, req ctrl.R
 		instanceLogger := logger.NewLogger(map[string]string{"emitter": "rate-limit-control-plane"}, os.Stdout)
 		rpaasInstanceData := manager.RpaasInstanceData{Instance: rpaasInstanceName, Service: rpaasServiceName}
 		worker = manager.NewRpaasInstanceSyncWorker(rpaasInstanceData, zoneNames, instanceLogger, r.Notify, new(aggregator.CompleteAggregator))
-		r.ManagerGoroutine.AddWorker(worker)
+		if !r.ManagerGoroutine.AddWorker(worker) {
+			r.Log.Info("worker already exists after add attempt", "instanceName", rpaasInstanceName, "request", req)
+		}
 	}
 
 	rpaasInstanceSyncWorker, ok := worker.(*manager.RpaasInstanceSyncWorker)
@@ -188,7 +199,7 @@ func (r *RateLimitControllerReconcile) getRpaasInstanceWorker(rpaasInstanceName 
 
 func (r *RateLimitControllerReconcile) removePodWorkerFromRpaasInstanceWorker(rpaasInstanceSyncWorker *manager.RpaasInstanceSyncWorker, podName string) error {
 	if err := rpaasInstanceSyncWorker.RemovePodWorker(podName); err != nil {
-		return fmt.Errorf("failed to remove pod worker %s from instance %s", podName, rpaasInstanceSyncWorker.GetID())
+		return fmt.Errorf("failed to remove pod worker %s from instance %s: %w", podName, rpaasInstanceSyncWorker.GetID(), err)
 	}
 	if rpaasInstanceSyncWorker.CountWorkers() == 0 {
 		if ok := r.ManagerGoroutine.RemoveWorker(rpaasInstanceSyncWorker.GetID()); !ok {

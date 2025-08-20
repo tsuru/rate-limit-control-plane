@@ -12,6 +12,7 @@ import (
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	nginxOperatorv1alpha1 "github.com/tsuru/nginx-operator/api/v1alpha1"
 	rpaasOperatorv1alpha1 "github.com/tsuru/rpaas-operator/api/v1alpha1"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/api/node/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -80,6 +81,7 @@ func main() {
 	zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	zapOpts.Level = zapcore.WarnLevel
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
 
 	repo, ch := repository.NewRpaasZoneDataRepository()

@@ -19,14 +19,16 @@ func NewGoroutineManager() *GoroutineManager {
 	}
 }
 
-func (gm *GoroutineManager) AddWorker(worker Worker) {
+func (gm *GoroutineManager) AddWorker(worker Worker) bool {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 	id := worker.GetID()
 	if _, exists := gm.workers[id]; !exists {
 		gm.workers[id] = worker
 		go worker.Start()
+		return true
 	}
+	return false
 }
 
 func (gm *GoroutineManager) RemoveWorker(id string) bool {

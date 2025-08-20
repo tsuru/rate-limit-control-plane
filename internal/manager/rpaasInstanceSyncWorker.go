@@ -120,7 +120,7 @@ func (w *RpaasInstanceSyncWorker) processTick() {
 			}
 			zoneData = append(zoneData, result.Value)
 		}
-		w.logger.Info("Collected zone data", "zone", zone, "entries", zoneData)
+		w.logger.Debug("Collected zone data", "zone", zone, "entries", zoneData)
 		operationDuration := time.Since(operationStart)
 		if operationDuration > config.Spec.WarnZoneCollectionTime {
 			w.logger.Warn("Zone data collection took too long", "durationMilliseconds", operationDuration.Milliseconds(), "zone", zone)
@@ -198,15 +198,22 @@ func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
 		URL:  fmt.Sprintf("http://%s:%d", podIP, administrativePort),
 	}
 	podWorker := NewRpaasPodWorker(rpaasPodData, w.RpaasInstanceData, w.logger, w.zoneDataChan)
-	w.PodWorkerManager.AddWorker(podWorker)
+	if !w.PodWorkerManager.AddWorker(podWorker) {
+		w.logger.Info("Worker already exists - not adding", "podName", podName, "Service", w.Service, "Instance", w.Instance)
+		return
+	}
+	w.logger.Info("Incrementing active pod worker count", "Service", w.Service, "Instance", w.Instance, "worker_type", "pod")
 	activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "pod").Inc()
+	w.logger.Info("Added pod worker", "podName", podName, "Service", w.Service, "Instance", w.Instance)
 }
 
 func (w *RpaasInstanceSyncWorker) RemovePodWorker(podName string) error {
 	if ok := w.PodWorkerManager.RemoveWorker(podName); !ok {
 		return fmt.Errorf("pod worker not found: %s", podName)
 	}
+	w.logger.Info("Decrementing active pod worker count", "Service", w.Service, "Instance", w.Instance, "worker_type", "pod")
 	activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "pod").Dec()
+	w.logger.Info("Removed pod worker", "podName", podName, "Service", w.Service, "Instance", w.Instance)
 	return nil
 }
 
