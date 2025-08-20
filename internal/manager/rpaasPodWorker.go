@@ -62,8 +62,6 @@ func NewRpaasPodWorker(rpaasPodData RpaasPodData, rpaasInstanceData RpaasInstanc
 		client:                   client,
 	}
 
-	activeWorkersGaugeVec.WithLabelValues(rpaasInstanceData.Service, rpaasInstanceData.Instance, "pod").Inc()
-
 	return worker
 }
 
@@ -107,7 +105,6 @@ func (w *RpaasPodWorker) Work() {
 }
 
 func (w *RpaasPodWorker) cleanup() {
-	activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "pod").Dec()
 	close(w.ReadZoneChan)
 	close(w.WriteZoneChan)
 	close(w.StopChan)

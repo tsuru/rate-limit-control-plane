@@ -199,12 +199,14 @@ func (w *RpaasInstanceSyncWorker) AddPodWorker(podIP, podName string) {
 	}
 	podWorker := NewRpaasPodWorker(rpaasPodData, w.RpaasInstanceData, w.logger, w.zoneDataChan)
 	w.PodWorkerManager.AddWorker(podWorker)
+	activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "pod").Inc()
 }
 
 func (w *RpaasInstanceSyncWorker) RemovePodWorker(podName string) error {
 	if ok := w.PodWorkerManager.RemoveWorker(podName); !ok {
 		return fmt.Errorf("pod worker not found: %s", podName)
 	}
+	activeWorkersGaugeVec.WithLabelValues(w.Service, w.Instance, "pod").Dec()
 	return nil
 }
 
